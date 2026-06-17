@@ -18,6 +18,9 @@ struct PreviewSaveView: View {
     @State private var showExistingDraftDecision = false
     @State private var showNewDraftDecision = false
     @State private var currentDraftID: UUID?
+    @State private var watermarkOption: WatermarkExportOption = .withWatermark
+    @State private var entitlementState: EntitlementState = .free
+    @State private var showWatermarklessShareConfirmation = false
 
     init(
         template: Template,
@@ -43,14 +46,16 @@ struct PreviewSaveView: View {
             MemoriesTheme.background.ignoresSafeArea()
 
             GeometryReader { geometry in
-                VStack(spacing: 18) {
-                    Spacer(minLength: 10)
+                let bottomPadding = max(14, geometry.safeAreaInsets.bottom + 8)
+
+                VStack(spacing: 12) {
+                    Spacer(minLength: 4)
 
                     previewImage(in: geometry.size)
 
                     actionPanel
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 18)
+                        .padding(.bottom, bottomPadding)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -64,12 +69,25 @@ struct PreviewSaveView: View {
         .task {
             renderIfNeeded()
         }
+        .onChange(of: watermarkOption) { _, _ in
+            renderedImage = nil
+            renderIfNeeded()
+        }
         .alert(item: $outputAlert) { alert in
             Alert(
                 title: Text(alert.title),
                 message: alert.message.map(Text.init),
                 dismissButton: .default(Text("OK"))
             )
+        }
+        .alert("透かしなしで共有しますか？", isPresented: $showWatermarklessShareConfirmation) {
+            Button("共有する") {
+                openShareSheet(consumesFreeWatermarkAllowance: true)
+            }
+
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("本日の無料分を使用します。")
         }
         .alert("保存が完了しました。", isPresented: $showExistingDraftDecision) {
             Button("下書きを削除", role: .destructive) {
@@ -103,7 +121,9 @@ struct PreviewSaveView: View {
             Text("この編集内容を下書きに残しますか？\n下書きを残さなくても、写真に保存した画像は残ります。")
         }
         .sheet(item: $shareItem) { item in
-            ShareSheet(items: [item.image])
+            ShareSheet(items: [item.image]) { completed, error in
+                handleShareCompletion(for: item, completed: completed, error: error)
+            }
         }
     }
 
@@ -112,7 +132,8 @@ struct PreviewSaveView: View {
         if let renderedImage {
             let imageAspectRatio = renderedImage.size.width / max(renderedImage.size.height, 1)
             let maxWidth = max(180, screenSize.width - 40)
-            let maxHeight = max(240, screenSize.height * 0.68)
+            let reservedPanelHeight: CGFloat = 318
+            let maxHeight = max(240, min(screenSize.height * 0.58, screenSize.height - reservedPanelHeight))
             let previewWidth = min(maxWidth, maxHeight * imageAspectRatio)
             let previewHeight = previewWidth / imageAspectRatio
 
@@ -148,6 +169,8 @@ struct PreviewSaveView: View {
     private var actionPanel: some View {
         MemoriesGlassPanel {
             VStack(spacing: 10) {
+                watermarkPicker
+
                 HStack(spacing: 10) {
                     MemoriesPrimaryButton("写真に保存", systemImage: "square.and.arrow.down") {
                         Task {
@@ -166,7 +189,52 @@ struct PreviewSaveView: View {
                     dismiss()
                 }
             }
-            .padding(14)
+            .padding(12)
+        }
+    }
+
+    private var watermarkPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("ウォーターマーク")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textSub)
+
+                Spacer()
+
+                Text(watermarkStatusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textSub)
+            }
+
+            HStack(spacing: 8) {
+                WatermarkOptionButton(
+                    title: "あり",
+                    subtitle: "無制限",
+                    systemImage: "checkmark.seal",
+                    isSelected: watermarkOption == .withWatermark,
+                    isEnabled: true
+                ) {
+                    selectWatermarkOption(.withWatermark)
+                }
+
+                WatermarkOptionButton(
+                    title: "なし",
+                    subtitle: watermarkAccessSnapshot.withoutWatermarkStatusText,
+                    systemImage: "seal",
+                    isSelected: watermarkOption == .withoutWatermark,
+                    isEnabled: watermarkAccessSnapshot.canExportWithoutWatermark
+                ) {
+                    selectWatermarkOption(.withoutWatermark)
+                }
+            }
+        }
+        .padding(12)
+        .background(MemoriesTheme.card.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
         }
     }
 
@@ -202,6 +270,10 @@ struct PreviewSaveView: View {
 
     @MainActor
     private func saveToPhotoLibrary() async {
+        guard ensureCanExportSelectedWatermark() else {
+            return
+        }
+
         guard let image = preparedImage() else {
             outputAlert = PreviewOutputAlert(title: "保存できませんでした", message: "画像の生成に失敗しました。")
             return
@@ -212,6 +284,11 @@ struct PreviewSaveView: View {
 
         do {
             try await PhotoLibrarySaver().save(image)
+            guard consumeWatermarkAllowanceIfNeeded() else {
+                outputAlert = PreviewOutputAlert(title: "保存しました", message: "ウォーターマークなしの本日分は使用済みです。")
+                return
+            }
+
             if currentDraftID != nil {
                 showExistingDraftDecision = true
             } else {
@@ -223,12 +300,44 @@ struct PreviewSaveView: View {
     }
 
     private func prepareShare() {
+        guard ensureCanExportSelectedWatermark() else {
+            return
+        }
+
+        if shouldConsumeFreeWatermarkAllowance(for: watermarkOption) {
+            showWatermarklessShareConfirmation = true
+            return
+        }
+
+        openShareSheet(consumesFreeWatermarkAllowance: false)
+    }
+
+    private func openShareSheet(consumesFreeWatermarkAllowance: Bool) {
         guard let image = preparedImage() else {
             outputAlert = PreviewOutputAlert(title: "共有できませんでした", message: "画像の生成に失敗しました。")
             return
         }
 
-        shareItem = ShareImageItem(image: image)
+        shareItem = ShareImageItem(
+            image: image,
+            consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance
+        )
+    }
+
+    private func handleShareCompletion(for item: ShareImageItem, completed: Bool, error: Error?) {
+        if let error {
+            outputAlert = PreviewOutputAlert(title: "共有できませんでした", message: error.localizedDescription)
+            return
+        }
+
+        guard completed, item.consumesFreeWatermarkAllowance else {
+            return
+        }
+
+        guard consumeFreeWatermarkAllowanceAfterSuccessfulOutput() else {
+            outputAlert = PreviewOutputAlert(title: "無料枠を更新できませんでした", message: "ウォーターマークなしの本日分は使用済みです。")
+            return
+        }
     }
 
     private func preparedImage() -> UIImage? {
@@ -247,9 +356,69 @@ struct PreviewSaveView: View {
                 template: template,
                 editState: editState,
                 photoImage: photoImage,
-                watermarkMode: .visible
+                watermarkMode: watermarkOption.watermarkMode
             )
         )
+    }
+
+    private var watermarkAccessPolicy: WatermarkAccessPolicy {
+        // TODO: Replace the free default with StoreKit-backed entitlement state.
+        WatermarkAccessPolicy(entitlementState: entitlementState)
+    }
+
+    private var watermarkAccessSnapshot: WatermarkAccessSnapshot {
+        watermarkAccessPolicy.snapshot
+    }
+
+    private var watermarkStatusText: String {
+        if watermarkAccessSnapshot.hasUnlimitedAccess {
+            return "ウォーターマークなし無制限"
+        }
+
+        return "なしは1日1回"
+    }
+
+    private func selectWatermarkOption(_ option: WatermarkExportOption) {
+        guard option == .withWatermark || watermarkAccessSnapshot.canExportWithoutWatermark else {
+            outputAlert = PreviewOutputAlert(title: "本日の無料枠を使用済みです", message: "ウォーターマークあり保存は無制限で使えます。")
+            watermarkOption = .withWatermark
+            return
+        }
+
+        watermarkOption = option
+    }
+
+    private func ensureCanExportSelectedWatermark() -> Bool {
+        guard watermarkAccessPolicy.canExport(option: watermarkOption) else {
+            outputAlert = PreviewOutputAlert(title: "本日の無料枠を使用済みです", message: "ウォーターマークあり保存は無制限で使えます。")
+            watermarkOption = .withWatermark
+            return false
+        }
+
+        return true
+    }
+
+    private func consumeWatermarkAllowanceIfNeeded() -> Bool {
+        guard shouldConsumeFreeWatermarkAllowance(for: watermarkOption) else {
+            return true
+        }
+
+        return consumeFreeWatermarkAllowanceAfterSuccessfulOutput()
+    }
+
+    private func shouldConsumeFreeWatermarkAllowance(for option: WatermarkExportOption) -> Bool {
+        option == .withoutWatermark && !watermarkAccessSnapshot.hasUnlimitedAccess
+    }
+
+    private func consumeFreeWatermarkAllowanceAfterSuccessfulOutput() -> Bool {
+        let didConsume = watermarkAccessPolicy.consumeIfNeeded(for: .withoutWatermark)
+        if didConsume {
+            watermarkOption = .withWatermark
+            renderedImage = nil
+            renderIfNeeded()
+        }
+
+        return didConsume
     }
 
     private func deleteCurrentDraft() {
@@ -306,6 +475,71 @@ private struct PreviewOutputAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String?
+}
+
+private struct WatermarkOptionButton: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let isSelected: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                    Text(subtitle)
+                        .font(.caption2.weight(.medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.48)
+    }
+
+    private var foregroundColor: Color {
+        if isSelected {
+            return MemoriesTheme.accentDeep
+        }
+
+        return MemoriesTheme.textSub
+    }
+
+    private var backgroundColor: Color {
+        if isSelected {
+            return MemoriesTheme.accent.opacity(0.18)
+        }
+
+        return MemoriesTheme.card.opacity(0.48)
+    }
+
+    private var borderColor: Color {
+        if isSelected {
+            return MemoriesTheme.accent.opacity(0.68)
+        }
+
+        return MemoriesTheme.border.opacity(0.72)
+    }
 }
 
 #Preview {

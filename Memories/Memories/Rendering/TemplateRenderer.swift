@@ -215,13 +215,23 @@ final class TemplateRenderer {
             )
         )
 
-        return drawText(
+        let textRect = verticallyCenteredTextRect(
             text,
             in: CGRect(x: textX, y: rect.minY, width: textWidth, height: rect.height),
             editState: editState,
             size: size,
             role: .meta
         )
+
+        _ = drawText(
+            text,
+            in: textRect,
+            editState: editState,
+            size: size,
+            role: .meta
+        )
+
+        return rect.height
     }
 
     private func drawIconRow(editState: CardEditState, in rect: CGRect, cursorY: CGFloat, size: CGSize) {
@@ -311,6 +321,35 @@ final class TemplateRenderer {
         )
 
         return rect.height
+    }
+
+    private func verticallyCenteredTextRect(
+        _ text: String,
+        in rect: CGRect,
+        editState: CardEditState,
+        size: CGSize,
+        role: RenderTextRole
+    ) -> CGRect {
+        let font = editState.selectedFontRole.uiFont(
+            size: CardOverlayLayout.fontSize(for: role, canvasSize: size),
+            weight: CardOverlayLayout.fontWeight(for: role)
+        )
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let measuredSize = NSString(string: text.trimmedForRenderer).boundingRect(
+            with: CGSize(width: rect.width, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        ).size
+        let textHeight = min(rect.height, ceil(measuredSize.height))
+        let centeredY = rect.midY - textHeight / 2
+
+        return CGRect(
+            x: rect.minX,
+            y: centeredY,
+            width: rect.width,
+            height: max(textHeight, font.lineHeight)
+        )
     }
 
     private func textShadow(for editState: CardEditState) -> NSShadow {

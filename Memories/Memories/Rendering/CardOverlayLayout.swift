@@ -76,7 +76,7 @@ struct CardOverlayLayout {
 
         switch role {
         case .meta:
-            return base * 0.031
+            return base * 0.038
         case .main:
             return base * 0.081
         case .sub:

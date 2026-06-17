@@ -35,7 +35,7 @@ struct HomeView: View {
                             .disabled(isLoadingPhoto)
 
                             NavigationLink {
-                                HistoryView()
+                                DraftsView()
                             } label: {
                                 HomeActionRow(title: "下書き", systemImage: "tray")
                             }

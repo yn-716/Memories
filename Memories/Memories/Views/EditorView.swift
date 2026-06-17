@@ -5,19 +5,29 @@ struct EditorView: View {
     let template: Template
     let photoImage: UIImage?
 
-    private let initialEditState: CardEditState
-
     @Environment(\.dismiss) private var dismiss
     @State private var editState: CardEditState
+    @State private var lastPersistedEditState: CardEditState
+    @State private var currentDraftID: UUID?
     @State private var selectedTab: EditorPanelTab = .text
     @State private var selectedTextTarget: TextEditTarget = .main
     @State private var selectedIconSection: IconEditSection = .theme
     @State private var selectedAppearanceSection: AppearanceEditSection = .font
     @State private var showBackConfirmation = false
-    @State private var showDraftUnavailableAlert = false
+    @State private var showDateEditSheet = false
+    @State private var isPreparingOutput = false
+    @State private var outputAlert: OutputAlert?
+    @State private var previewRoute: PreviewRoute?
 
-    init(template: Template, photoImage: UIImage? = nil) {
-        let initialState = if photoImage == nil {
+    init(
+        template: Template,
+        photoImage: UIImage? = nil,
+        initialEditState: CardEditState? = nil,
+        draftID: UUID? = nil
+    ) {
+        let initialState = if let initialEditState {
+            initialEditState
+        } else if photoImage == nil {
             template.previewEditState
         } else {
             CardEditState.newCard(
@@ -29,8 +39,9 @@ struct EditorView: View {
 
         self.template = template
         self.photoImage = photoImage
-        self.initialEditState = initialState
         _editState = State(initialValue: initialState)
+        _lastPersistedEditState = State(initialValue: initialState)
+        _currentDraftID = State(initialValue: draftID)
     }
 
     var body: some View {
@@ -73,30 +84,56 @@ struct EditorView: View {
             }
 
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink {
-                    ExportView(
-                        template: template,
-                        editState: editState,
-                        photoImage: photoImage
-                    )
-                } label: {
-                    Text("保存")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            LinearGradient(
-                                colors: [MemoriesTheme.accentDeep.opacity(0.92), MemoriesTheme.accent.opacity(0.72)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(.white.opacity(0.26), lineWidth: 1)
+                HStack(spacing: 8) {
+                    Button {
+                        Task {
+                            await saveDraft()
                         }
+                    } label: {
+                        Text("下書き保存")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(MemoriesTheme.accentDeep)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(.ultraThinMaterial)
+                            .background(MemoriesTheme.card.opacity(0.42))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isPreparingOutput)
+
+                    Button {
+                        previewRoute = PreviewRoute(
+                            template: template,
+                            editState: editState,
+                            photoImage: photoImage,
+                            draftID: currentDraftID
+                        )
+                    } label: {
+                        Text("プレビュー")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                LinearGradient(
+                                    colors: [MemoriesTheme.accentDeep.opacity(0.92), MemoriesTheme.accent.opacity(0.72)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .stroke(.white.opacity(0.26), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isPreparingOutput)
                 }
             }
         }
@@ -106,8 +143,9 @@ struct EditorView: View {
             titleVisibility: .visible
         ) {
             Button("下書き保存") {
-                // TODO: SwiftData下書き保存を接続するまでは、保存済みと誤認される仮挙動を入れない。
-                showDraftUnavailableAlert = true
+                Task {
+                    await saveDraft(shouldDismissAfterSave: true)
+                }
             }
 
             Button("破棄して戻る", role: .destructive) {
@@ -118,13 +156,66 @@ struct EditorView: View {
         } message: {
             Text("下書き保存は明示操作のみです。")
         }
-        .alert("まだ下書き保存できません", isPresented: $showDraftUnavailableAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("現時点では下書きは保存されません。")
+        .alert(item: $outputAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: alert.message.map(Text.init),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .sheet(isPresented: $showDateEditSheet) {
+            DateEditSheet(editState: editState) { payload in
+                editState.dateMode = payload.dateMode
+                editState.selectedDate = payload.selectedDate
+                editState.startDate = payload.startDate
+                editState.endDate = payload.endDate
+                editState.customDateText = payload.customDateText
+            }
+        }
+        .navigationDestination(item: $previewRoute) { route in
+            PreviewSaveView(
+                template: route.template,
+                editState: route.editState,
+                photoImage: route.photoImage,
+                draftID: route.draftID
+            ) { draftID in
+                currentDraftID = draftID
+                lastPersistedEditState = editState
+            } onDraftDeleted: {
+                currentDraftID = nil
+                lastPersistedEditState = editState
+                previewRoute = nil
+                DispatchQueue.main.async {
+                    dismiss()
+                }
+            } onFinishWithoutDraft: {
+                previewRoute = nil
+                DispatchQueue.main.async {
+                    dismiss()
+                }
+            }
+        }
+        .overlay {
+            if isPreparingOutput {
+                ZStack {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+
+                    ProgressView("下書きを保存中...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                        .tint(MemoriesTheme.accentDeep)
+                        .padding(18)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(MemoriesTheme.border.opacity(0.78), lineWidth: 1)
+                        }
+                }
+            }
         }
         .scrollDismissesKeyboard(.interactively)
-        // TODO: 写真フォルダ保存、共有、SwiftData下書き保存はPhase 2以降で接続する。
     }
 
     private var previewArea: some View {
@@ -279,84 +370,46 @@ struct EditorView: View {
     }
 
     private var dateEditor: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                ForEach(CardDateMode.allCases) { mode in
-                    SubItemChip(
-                        title: mode.displayName,
-                        isSelected: editState.dateMode == mode
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.16)) {
-                            editState.dateMode = mode
-                            normalizeDateRange()
-                        }
-                    }
-                }
-
-                Spacer()
-
-                Text(editState.displayDateText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(MemoriesTheme.textSub)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(editState.displayDateText.trimmedForEditor.isEmpty ? "未入力" : editState.displayDateText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textMain)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.75)
+                    .minimumScaleFactor(0.76)
+
+                Text(editState.dateMode.displayName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textSub)
             }
 
-            if editState.dateMode == .single {
-                compactDatePicker(title: "日付", selection: selectedDateBinding)
-            } else if editState.dateMode == .range {
-                HStack(spacing: 8) {
-                    compactDatePicker(title: "開始", selection: startDateBinding)
-                    compactDatePicker(title: "終了", selection: endDateBinding)
-                }
-            } else {
-                VStack(spacing: 7) {
-                    TextField("Spring 2026 / First Cafe Day / Today", text: $editState.customDateText)
-                        .textInputAutocapitalization(.words)
-                        .submitLabel(.done)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(MemoriesTheme.textMain)
-                        .lineLimit(1)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(MemoriesTheme.card.opacity(0.68))
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .stroke(MemoriesTheme.border.opacity(0.82), lineWidth: 1)
-                        }
+            Spacer()
 
-                    HStack {
-                        Spacer()
-
-                        Text("\(editState.customDateText.count) / 30 文字目安")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(MemoriesTheme.textSub)
+            Button {
+                showDateEditSheet = true
+            } label: {
+                Label("変更", systemImage: "calendar")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.accentDeep)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(.ultraThinMaterial)
+                    .background(MemoriesTheme.card.opacity(0.62))
+                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                            .stroke(MemoriesTheme.border.opacity(0.78), lineWidth: 1)
                     }
-                }
             }
+            .buttonStyle(.plain)
         }
-    }
-
-    private func compactDatePicker(title: String, selection: Binding<Date>) -> some View {
-        HStack(spacing: 6) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(MemoriesTheme.textSub)
-
-            DatePicker(title, selection: selection, displayedComponents: .date)
-                .labelsHidden()
-                .datePickerStyle(.compact)
-                .tint(MemoriesTheme.accentDeep)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity)
-        .background(MemoriesTheme.card.opacity(0.76))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(MemoriesTheme.card.opacity(0.68))
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.74), lineWidth: 1)
         }
     }
 
@@ -531,7 +584,7 @@ struct EditorView: View {
     }
 
     private var hasUnsavedChanges: Bool {
-        editState != initialEditState
+        editState != lastPersistedEditState
     }
 
     private var photoAspectRatio: CGFloat {
@@ -582,12 +635,345 @@ struct EditorView: View {
         editState.endDate = max(editState.startDate, CardEditState.normalizedDate(editState.endDate))
     }
 
+    @MainActor
+    private func saveDraft(shouldDismissAfterSave: Bool = false) async {
+        isPreparingOutput = true
+        defer { isPreparingOutput = false }
+
+        do {
+            let record = try DraftRepository.shared.save(
+                template: template,
+                editState: editState,
+                photoImage: photoImage,
+                existingDraftID: currentDraftID
+            )
+            currentDraftID = record.id
+            lastPersistedEditState = editState
+
+            if shouldDismissAfterSave {
+                dismiss()
+            } else {
+                outputAlert = OutputAlert(title: "下書きに保存しました", message: nil)
+            }
+        } catch {
+            outputAlert = OutputAlert(title: "下書き保存できませんでした", message: error.localizedDescription)
+        }
+    }
+
     private func iconColumns(count: Int) -> [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 7), count: count)
     }
 
     private func editorPanelHeight(for size: CGSize) -> CGFloat {
         min(max(size.height * 0.36, 252), size.height * 0.4)
+    }
+}
+
+private struct OutputAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String?
+}
+
+private struct PreviewRoute: Identifiable, Hashable {
+    let id = UUID()
+    let template: Template
+    let editState: CardEditState
+    let photoImage: UIImage?
+    let draftID: UUID?
+
+    static func == (lhs: PreviewRoute, rhs: PreviewRoute) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+private struct DateEditPayload {
+    let dateMode: CardDateMode
+    let selectedDate: Date
+    let startDate: Date
+    let endDate: Date
+    let customDateText: String
+}
+
+private struct DateEditSheet: View {
+    let onApply: (DateEditPayload) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var tempDateMode: CardDateMode
+    @State private var tempSelectedDate: Date
+    @State private var tempStartDate: Date
+    @State private var tempEndDate: Date
+    @State private var tempCustomDateText: String
+
+    init(editState: CardEditState, onApply: @escaping (DateEditPayload) -> Void) {
+        self.onApply = onApply
+        _tempDateMode = State(initialValue: editState.dateMode)
+        _tempSelectedDate = State(initialValue: editState.selectedDate)
+        _tempStartDate = State(initialValue: editState.startDate)
+        _tempEndDate = State(initialValue: max(editState.startDate, editState.endDate))
+        _tempCustomDateText = State(initialValue: editState.customDateText)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                MemoriesTheme.background.ignoresSafeArea()
+
+                VStack(spacing: 14) {
+                    dateEditPanel
+
+                    actionButtons
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, 14)
+            }
+            .navigationTitle("日付を選択")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents(presentationDetents)
+        .presentationDragIndicator(.visible)
+    }
+
+    private var dateEditPanel: some View {
+        MemoriesGlassPanel {
+            VStack(alignment: .leading, spacing: 13) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("日付を編集")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+
+                    Text("適用するまでカードには反映されません")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MemoriesTheme.textSub)
+                }
+
+                modePicker
+
+                dateInput
+
+                displayPreviewRow
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
+        }
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 10) {
+            MemoriesSecondaryButton("キャンセル") {
+                dismiss()
+            }
+
+            MemoriesPrimaryButton("適用", systemImage: "checkmark") {
+                applyDate()
+            }
+        }
+    }
+
+    private var displayPreviewRow: some View {
+        HStack {
+            Text("表示予定")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textSub)
+
+            Spacer()
+
+            Text(tempDisplayText.trimmedForEditor.isEmpty ? "未入力" : tempDisplayText)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textMain)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(MemoriesTheme.card.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.7), lineWidth: 1)
+        }
+    }
+
+    private var presentationDetents: Set<PresentationDetent> {
+        switch tempDateMode {
+        case .single:
+            return [.height(660), .large]
+        case .range:
+            return [.height(430), .large]
+        case .custom:
+            return [.height(360), .medium]
+        }
+    }
+
+    private var modePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(CardDateMode.allCases) { mode in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        tempDateMode = mode
+                        normalizeRange()
+                    }
+                } label: {
+                    Text(mode.displayName)
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .foregroundStyle(tempDateMode == mode ? MemoriesTheme.accentDeep : MemoriesTheme.textSub)
+                        .background(tempDateMode == mode ? MemoriesTheme.accent.opacity(0.16) : MemoriesTheme.card.opacity(0.44))
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .stroke(
+                                    tempDateMode == mode ? MemoriesTheme.accent.opacity(0.6) : MemoriesTheme.border.opacity(0.62),
+                                    lineWidth: 1
+                                )
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dateInput: some View {
+        switch tempDateMode {
+        case .single:
+            VStack(alignment: .leading, spacing: 8) {
+                Text("1日")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textSub)
+
+                DatePicker("日付", selection: $tempSelectedDate, displayedComponents: .date)
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                    .tint(MemoriesTheme.accentDeep)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .background(MemoriesTheme.card.opacity(0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 17, style: .continuous)
+                            .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+                    }
+            }
+
+        case .range:
+            VStack(alignment: .leading, spacing: 10) {
+                Text("期間")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textSub)
+
+                datePickerRow(title: "開始日", selection: tempStartDateBinding)
+                datePickerRow(title: "終了日", selection: tempEndDateBinding)
+            }
+
+        case .custom:
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Spring 2026 / First Cafe Day / Today", text: $tempCustomDateText)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(MemoriesTheme.textMain)
+                    .lineLimit(1)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 12)
+                    .background(MemoriesTheme.card.opacity(0.68))
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(MemoriesTheme.border.opacity(0.8), lineWidth: 1)
+                    }
+
+                HStack {
+                    Spacer()
+
+                    Text("\(tempCustomDateText.count) / 30 文字目安")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textSub)
+                }
+            }
+        }
+    }
+
+    private func datePickerRow(title: String, selection: Binding<Date>) -> some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textMain)
+
+            Spacer()
+
+            DatePicker(title, selection: selection, displayedComponents: .date)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(MemoriesTheme.accentDeep)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(MemoriesTheme.card.opacity(0.62))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.74), lineWidth: 1)
+        }
+    }
+
+    private var tempStartDateBinding: Binding<Date> {
+        Binding(
+            get: { tempStartDate },
+            set: { newValue in
+                tempStartDate = CardEditState.normalizedDate(newValue)
+                if tempEndDate < tempStartDate {
+                    tempEndDate = tempStartDate
+                }
+            }
+        )
+    }
+
+    private var tempEndDateBinding: Binding<Date> {
+        Binding(
+            get: { max(tempStartDate, tempEndDate) },
+            set: { newValue in
+                tempEndDate = max(tempStartDate, CardEditState.normalizedDate(newValue))
+            }
+        )
+    }
+
+    private var tempDisplayText: String {
+        switch tempDateMode {
+        case .single:
+            return CardEditState.formatted(tempSelectedDate)
+        case .range:
+            return "\(CardEditState.formatted(tempStartDate)) - \(CardEditState.formatted(max(tempStartDate, tempEndDate)))"
+        case .custom:
+            return tempCustomDateText
+        }
+    }
+
+    private func normalizeRange() {
+        tempSelectedDate = CardEditState.normalizedDate(tempSelectedDate)
+        tempStartDate = CardEditState.normalizedDate(tempStartDate)
+        tempEndDate = max(tempStartDate, CardEditState.normalizedDate(tempEndDate))
+    }
+
+    private func applyDate() {
+        normalizeRange()
+        onApply(
+            DateEditPayload(
+                dateMode: tempDateMode,
+                selectedDate: CardEditState.normalizedDate(tempSelectedDate),
+                startDate: tempStartDate,
+                endDate: max(tempStartDate, tempEndDate),
+                customDateText: tempCustomDateText
+            )
+        )
+        dismiss()
     }
 }
 
@@ -967,6 +1353,12 @@ private extension WeatherType {
         default:
             return displayName.ja
         }
+    }
+}
+
+private extension String {
+    var trimmedForEditor: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

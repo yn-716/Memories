@@ -15,7 +15,7 @@ struct TemplateCanvasPreview: View {
                 photoPlaceholder
 
                 overlayContent(size: size)
-                    .padding(min(size.width, size.height) * 0.065)
+                    .padding(CardOverlayLayout.inset(for: size))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: editState.selectedPosition.alignment)
             }
             .clipShape(RoundedRectangle(cornerRadius: MemoriesTheme.cardRadius))
@@ -50,19 +50,19 @@ struct TemplateCanvasPreview: View {
     private func overlayContent(size: CGSize) -> some View {
         VStack(alignment: editState.selectedPosition.horizontalAlignment, spacing: max(3, size.width * 0.012)) {
             if editState.visibilitySettings.showThemeIcon || shouldShowWeather {
-                HStack(spacing: max(5, size.width * 0.018)) {
+                HStack(spacing: max(5, CardOverlayLayout.iconSize(for: size) * CardOverlayLayout.iconSpacingRatio)) {
                     if editState.selectedPosition.isTrailing {
                         Spacer(minLength: 0)
                     }
 
                     if editState.visibilitySettings.showThemeIcon {
                         Image(systemName: editState.selectedThemeIcon.symbolName)
-                            .font(.system(size: max(15, size.width * 0.06), weight: .medium))
+                            .font(.system(size: max(14, CardOverlayLayout.iconSize(for: size)), weight: .medium))
                     }
 
                     if shouldShowWeather, let symbolName = editState.selectedWeather.symbolName {
                         Image(systemName: symbolName)
-                            .font(.system(size: max(15, size.width * 0.058), weight: .medium))
+                            .font(.system(size: max(14, CardOverlayLayout.iconSize(for: size)), weight: .medium))
                     }
                 }
             }
@@ -77,7 +77,7 @@ struct TemplateCanvasPreview: View {
 
             if shouldShowMainText {
                 overlayText(editState.mainText, size: size, role: .main)
-                    .padding(.top, max(2, size.width * 0.01))
+                    .padding(.top, max(2, CardOverlayLayout.base(for: size) * CardOverlayLayout.mainTopSpacingRatio))
             }
 
             if shouldShowSubText {
@@ -91,7 +91,7 @@ struct TemplateCanvasPreview: View {
             radius: editState.selectedTextColor == .white ? 5 : 2,
             y: 1
         )
-        .frame(maxWidth: size.width * 0.58, alignment: editState.selectedPosition.isTrailing ? .trailing : .leading)
+        .frame(maxWidth: CardOverlayLayout.blockWidth(for: size), alignment: editState.selectedPosition.isTrailing ? .trailing : .leading)
     }
 
     private func overlayText(_ text: String, size: CGSize, role: PreviewTextRole) -> some View {
@@ -137,15 +137,13 @@ struct TemplateCanvasPreview: View {
     }
 
     private func font(for role: PreviewTextRole, size: CGSize) -> Font {
-        let base = min(size.width, size.height)
-
         switch role {
         case .meta:
-            return editState.selectedFontRole.font(size: max(9, base * 0.035), weight: .medium)
+            return editState.selectedFontRole.font(size: max(9, CardOverlayLayout.fontSize(for: .meta, canvasSize: size)), weight: .medium)
         case .main:
-            return editState.selectedFontRole.font(size: max(20, base * 0.085), weight: .semibold)
+            return editState.selectedFontRole.font(size: max(18, CardOverlayLayout.fontSize(for: .main, canvasSize: size)), weight: .semibold)
         case .sub:
-            return editState.selectedFontRole.font(size: max(11, base * 0.043), weight: .regular)
+            return editState.selectedFontRole.font(size: max(10, CardOverlayLayout.fontSize(for: .sub, canvasSize: size)), weight: .regular)
         }
     }
 }
@@ -156,11 +154,7 @@ private extension String {
     }
 }
 
-private enum PreviewTextRole {
-    case meta
-    case main
-    case sub
-}
+private typealias PreviewTextRole = CardOverlayTextRole
 
 #Preview {
     let template = Template(

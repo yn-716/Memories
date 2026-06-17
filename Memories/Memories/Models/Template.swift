@@ -92,7 +92,7 @@ enum CardDateMode: String, Codable, CaseIterable, Hashable, Identifiable {
     }
 }
 
-struct CardEditState: Hashable {
+struct CardEditState: Codable, Hashable {
     var selectedThemeIcon: ThemeIconType
     var selectedWeather: WeatherType
     var locationText: String
@@ -131,7 +131,7 @@ struct CardEditState: Hashable {
     ) -> CardEditState {
         CardEditState(
             selectedThemeIcon: .walk,
-            selectedWeather: .none,
+            selectedWeather: .sunny,
             locationText: "",
             dateMode: .single,
             selectedDate: normalizedDate(date),
@@ -196,7 +196,7 @@ struct VisibilitySettings: Codable, Hashable {
         showThemeIcon: true,
         showLocation: true,
         showDate: true,
-        showWeather: false,
+        showWeather: true,
         showMainText: true,
         showSubText: true
     )

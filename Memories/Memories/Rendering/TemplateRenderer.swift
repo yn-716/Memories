@@ -5,17 +5,20 @@ struct TemplateRenderConfiguration {
     let editState: CardEditState
     let outputSize: CGSize
     let photoImage: UIImage?
+    let watermarkMode: WatermarkMode
 
     init(
         template: Template,
         editState: CardEditState,
         outputSize: CGSize? = nil,
-        photoImage: UIImage? = nil
+        photoImage: UIImage? = nil,
+        watermarkMode: WatermarkMode = .visible
     ) {
         self.template = template
         self.editState = editState
         self.photoImage = photoImage
         self.outputSize = outputSize ?? photoImage?.preferredRenderSize ?? CardAspectRatio.fourByFive.outputSize
+        self.watermarkMode = watermarkMode
     }
 }
 
@@ -37,6 +40,12 @@ final class TemplateRenderer {
             drawOverlay(
                 template: configuration.template,
                 editState: configuration.editState,
+                in: cgContext,
+                size: configuration.outputSize
+            )
+            WatermarkRenderer().draw(
+                mode: configuration.watermarkMode,
+                overlayPosition: configuration.editState.selectedPosition,
                 in: cgContext,
                 size: configuration.outputSize
             )
@@ -115,8 +124,8 @@ final class TemplateRenderer {
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
 
-        let inset = min(size.width, size.height) * 0.065
-        let blockWidth = size.width * 0.58
+        let inset = CardOverlayLayout.inset(for: size)
+        let blockWidth = CardOverlayLayout.blockWidth(for: size)
         let blockHeight = estimatedOverlayHeight(for: editState, size: size)
         let x = editState.selectedPosition.isTrailing ? size.width - inset - blockWidth : inset
         let y = editState.selectedPosition.isBottom ? size.height - inset - blockHeight : inset
@@ -132,14 +141,14 @@ final class TemplateRenderer {
 
         if editState.visibilitySettings.showThemeIcon || shouldDrawWeather(editState) {
             drawIconRow(editState: editState, in: rect, cursorY: cursorY, size: size)
-            cursorY += min(size.width, size.height) * 0.06
+            cursorY += CardOverlayLayout.base(for: size) * CardOverlayLayout.iconRowAdvanceRatio
         }
 
         if shouldDrawText(editState.locationText, isVisible: editState.visibilitySettings.showLocation) {
             cursorY += drawMetaLine(
                 symbolName: "mappin",
                 text: editState.locationText,
-                in: lineRect(parent: rect, y: cursorY, height: min(size.width, size.height) * 0.035),
+                in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)),
                 editState: editState,
                 size: size
             )
@@ -148,7 +157,7 @@ final class TemplateRenderer {
         if shouldDrawText(editState.displayDateText, isVisible: editState.visibilitySettings.showDate) {
             cursorY += drawText(
                 editState.displayDateText,
-                in: lineRect(parent: rect, y: cursorY, height: min(size.width, size.height) * 0.035),
+                in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)),
                 editState: editState,
                 size: size,
                 role: .meta
@@ -156,10 +165,10 @@ final class TemplateRenderer {
         }
 
         if shouldDrawText(editState.mainText, isVisible: editState.visibilitySettings.showMainText) {
-            cursorY += min(size.width, size.height) * 0.015
+            cursorY += CardOverlayLayout.base(for: size) * CardOverlayLayout.mainTopSpacingRatio
             cursorY += drawText(
                 editState.mainText,
-                in: lineRect(parent: rect, y: cursorY, height: min(size.width, size.height) * 0.075),
+                in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .main, canvasSize: size)),
                 editState: editState,
                 size: size,
                 role: .main
@@ -169,7 +178,7 @@ final class TemplateRenderer {
         if shouldDrawText(editState.subText, isVisible: editState.visibilitySettings.showSubText) {
             cursorY += drawText(
                 editState.subText,
-                in: lineRect(parent: rect, y: cursorY, height: min(size.width, size.height) * 0.048),
+                in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .sub, canvasSize: size)),
                 editState: editState,
                 size: size,
                 role: .sub
@@ -185,8 +194,8 @@ final class TemplateRenderer {
         editState: CardEditState,
         size: CGSize
     ) -> CGFloat {
-        let iconSize = min(size.width, size.height) * 0.026
-        let spacing = iconSize * 0.35
+        let iconSize = CardOverlayLayout.metaIconSize(for: size)
+        let spacing = iconSize * CardOverlayLayout.iconSpacingRatio
         let textWidth = rect.width - iconSize - spacing
         let iconX = editState.selectedPosition.isTrailing ? rect.maxX - iconSize : rect.minX
         let textX = editState.selectedPosition.isTrailing ? rect.minX : rect.minX + iconSize + spacing
@@ -211,8 +220,8 @@ final class TemplateRenderer {
     }
 
     private func drawIconRow(editState: CardEditState, in rect: CGRect, cursorY: CGFloat, size: CGSize) {
-        let iconSize = min(size.width, size.height) * 0.045
-        let spacing = iconSize * 0.35
+        let iconSize = CardOverlayLayout.iconSize(for: size)
+        let spacing = iconSize * CardOverlayLayout.iconSpacingRatio
         var symbols: [String] = []
 
         if editState.visibilitySettings.showThemeIcon {
@@ -249,7 +258,10 @@ final class TemplateRenderer {
         paragraphStyle.lineBreakMode = .byTruncatingTail
         paragraphStyle.alignment = editState.selectedPosition.isTrailing ? .right : .left
 
-        let font = editState.selectedFontRole.uiFont(size: fontSize(for: role, canvasSize: size), weight: fontWeight(for: role))
+        let font = editState.selectedFontRole.uiFont(
+            size: CardOverlayLayout.fontSize(for: role, canvasSize: size),
+            weight: CardOverlayLayout.fontWeight(for: role)
+        )
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: editState.selectedTextColor.uiColor,
@@ -276,23 +288,24 @@ final class TemplateRenderer {
     }
 
     private func estimatedOverlayHeight(for editState: CardEditState, size: CGSize) -> CGFloat {
-        let base = min(size.width, size.height)
+        let base = CardOverlayLayout.base(for: size)
         var height: CGFloat = 0
 
         if editState.visibilitySettings.showThemeIcon || shouldDrawWeather(editState) {
-            height += base * 0.068
+            height += base * (CardOverlayLayout.iconRowAdvanceRatio + 0.008)
         }
         if shouldDrawText(editState.locationText, isVisible: editState.visibilitySettings.showLocation) {
-            height += base * 0.035
+            height += CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)
         }
         if shouldDrawText(editState.displayDateText, isVisible: editState.visibilitySettings.showDate) {
-            height += base * 0.035
+            height += CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)
         }
         if shouldDrawText(editState.mainText, isVisible: editState.visibilitySettings.showMainText) {
-            height += base * 0.09
+            height += base * CardOverlayLayout.mainTopSpacingRatio
+            height += CardOverlayLayout.lineHeight(for: .main, canvasSize: size)
         }
         if shouldDrawText(editState.subText, isVisible: editState.visibilitySettings.showSubText) {
-            height += base * 0.048
+            height += CardOverlayLayout.lineHeight(for: .sub, canvasSize: size)
         }
         return max(height, base * 0.08)
     }
@@ -309,36 +322,9 @@ final class TemplateRenderer {
         CGRect(x: parent.minX, y: y, width: parent.width, height: height)
     }
 
-    private func fontSize(for role: RenderTextRole, canvasSize: CGSize) -> CGFloat {
-        let base = min(canvasSize.width, canvasSize.height)
-
-        switch role {
-        case .meta:
-            return base * 0.026
-        case .main:
-            return base * 0.066
-        case .sub:
-            return base * 0.034
-        }
-    }
-
-    private func fontWeight(for role: RenderTextRole) -> UIFont.Weight {
-        switch role {
-        case .meta:
-            return .medium
-        case .main:
-            return .semibold
-        case .sub:
-            return .regular
-        }
-    }
 }
 
-private enum RenderTextRole {
-    case meta
-    case main
-    case sub
-}
+private typealias RenderTextRole = CardOverlayTextRole
 
 private extension String {
     var trimmedForRenderer: String {
@@ -352,7 +338,7 @@ private extension UIImage {
             return CardAspectRatio.fourByFive.outputSize
         }
 
-        let maxLongSide: CGFloat = 1800
+        let maxLongSide: CGFloat = 3000
         let aspectRatio = size.width / size.height
 
         if aspectRatio >= 1 {

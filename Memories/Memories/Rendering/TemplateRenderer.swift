@@ -146,7 +146,8 @@ final class TemplateRenderer {
 
         if shouldDrawText(editState.locationText, isVisible: editState.visibilitySettings.showLocation) {
             cursorY += drawMetaLine(
-                symbolName: "mappin",
+                assetName: UtilityIconType.location.assetName,
+                fallbackSymbolName: UtilityIconType.location.fallbackSymbolName,
                 text: editState.locationText,
                 in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)),
                 editState: editState,
@@ -155,12 +156,13 @@ final class TemplateRenderer {
         }
 
         if shouldDrawText(editState.displayDateText, isVisible: editState.visibilitySettings.showDate) {
-            cursorY += drawText(
-                editState.displayDateText,
+            cursorY += drawMetaLine(
+                assetName: UtilityIconType.calendar.assetName,
+                fallbackSymbolName: UtilityIconType.calendar.fallbackSymbolName,
+                text: editState.displayDateText,
                 in: lineRect(parent: rect, y: cursorY, height: CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)),
                 editState: editState,
-                size: size,
-                role: .meta
+                size: size
             )
         }
 
@@ -188,27 +190,30 @@ final class TemplateRenderer {
     }
 
     private func drawMetaLine(
-        symbolName: String,
+        assetName: String,
+        fallbackSymbolName: String,
         text: String,
         in rect: CGRect,
         editState: CardEditState,
         size: CGSize
     ) -> CGFloat {
         let iconSize = CardOverlayLayout.metaIconSize(for: size)
-        let spacing = iconSize * CardOverlayLayout.iconSpacingRatio
+        let spacing = iconSize * CardOverlayLayout.iconTextSpacingRatio
         let textWidth = rect.width - iconSize - spacing
         let iconX = editState.selectedPosition.isTrailing ? rect.maxX - iconSize : rect.minX
         let textX = editState.selectedPosition.isTrailing ? rect.minX : rect.minX + iconSize + spacing
 
-        let icon = UIImage(systemName: symbolName)?
-            .withTintColor(editState.selectedTextColor.uiColor, renderingMode: .alwaysOriginal)
-        let iconRect = CGRect(
-            x: iconX,
-            y: rect.minY + max(0, (rect.height - iconSize) / 2),
-            width: iconSize,
-            height: iconSize
+        drawTemplateIcon(
+            assetName: assetName,
+            fallbackSymbolName: fallbackSymbolName,
+            tintColor: editState.selectedTextColor.uiColor,
+            in: CGRect(
+                x: iconX,
+                y: rect.minY + max(0, (rect.height - iconSize) / 2),
+                width: iconSize,
+                height: iconSize
+            )
         )
-        icon?.draw(in: iconRect)
 
         return drawText(
             text,
@@ -220,27 +225,56 @@ final class TemplateRenderer {
     }
 
     private func drawIconRow(editState: CardEditState, in rect: CGRect, cursorY: CGFloat, size: CGSize) {
-        let iconSize = CardOverlayLayout.iconSize(for: size)
-        let spacing = iconSize * CardOverlayLayout.iconSpacingRatio
-        var symbols: [String] = []
+        let spacing = CardOverlayLayout.iconRowSpacing(for: size)
+        var icons: [(assetName: String?, fallbackSymbolName: String, size: CGFloat)] = []
 
         if editState.visibilitySettings.showThemeIcon {
-            symbols.append(editState.selectedThemeIcon.symbolName)
+            icons.append((
+                editState.selectedThemeIcon.assetName,
+                editState.selectedThemeIcon.symbolName,
+                CardOverlayLayout.themeIconSize(for: size)
+            ))
         }
 
         if shouldDrawWeather(editState), let weatherSymbol = editState.selectedWeather.symbolName {
-            symbols.append(weatherSymbol)
+            icons.append((
+                editState.selectedWeather.assetName,
+                weatherSymbol,
+                CardOverlayLayout.weatherIconSize(for: size)
+            ))
         }
 
-        let totalWidth = CGFloat(symbols.count) * iconSize + CGFloat(max(0, symbols.count - 1)) * spacing
+        let totalWidth = icons.reduce(CGFloat(0)) { $0 + $1.size } + CGFloat(max(0, icons.count - 1)) * spacing
+        let maxIconSize = icons.map(\.size).max() ?? 0
         var cursorX = editState.selectedPosition.isTrailing ? rect.maxX - totalWidth : rect.minX
 
-        for symbol in symbols {
-            let image = UIImage(systemName: symbol)?
-                .withTintColor(editState.selectedTextColor.uiColor, renderingMode: .alwaysOriginal)
-            image?.draw(in: CGRect(x: cursorX, y: cursorY, width: iconSize, height: iconSize))
-            cursorX += iconSize + spacing
+        for icon in icons {
+            drawTemplateIcon(
+                assetName: icon.assetName,
+                fallbackSymbolName: icon.fallbackSymbolName,
+                tintColor: editState.selectedTextColor.uiColor,
+                in: CGRect(
+                    x: cursorX,
+                    y: cursorY + max(0, (maxIconSize - icon.size) / 2),
+                    width: icon.size,
+                    height: icon.size
+                )
+            )
+            cursorX += icon.size + spacing
         }
+    }
+
+    private func drawTemplateIcon(
+        assetName: String?,
+        fallbackSymbolName: String,
+        tintColor: UIColor,
+        in rect: CGRect
+    ) {
+        let image = assetName.flatMap { UIImage(named: $0) } ?? UIImage(systemName: fallbackSymbolName)
+        image?
+            .withRenderingMode(.alwaysTemplate)
+            .withTintColor(tintColor, renderingMode: .alwaysOriginal)
+            .draw(in: rect)
     }
 
     private func drawText(

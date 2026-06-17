@@ -453,6 +453,7 @@ struct EditorView: View {
                         CompactIconOptionButton(
                             title: icon.displayName.ja,
                             systemImage: icon.symbolName,
+                            assetName: icon.assetName,
                             isSelected: editState.selectedThemeIcon == icon
                         ) {
                             editState.selectedThemeIcon = icon
@@ -465,6 +466,7 @@ struct EditorView: View {
                         CompactIconOptionButton(
                             title: weather.editorDisplayName,
                             systemImage: weather.symbolName ?? "minus.circle",
+                            assetName: weather.assetName,
                             isSelected: editState.selectedWeather == weather
                         ) {
                             editState.selectedWeather = weather
@@ -1207,14 +1209,29 @@ private struct CompactVisibilityToggle: View {
 private struct CompactIconOptionButton: View {
     let title: String
     let systemImage: String
+    let assetName: String?
     let isSelected: Bool
     let action: () -> Void
+
+    init(
+        title: String,
+        systemImage: String,
+        assetName: String? = nil,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.assetName = assetName
+        self.isSelected = isSelected
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.semibold))
+                MemoriesTemplateIcon(assetName: assetName, fallbackSystemName: systemImage)
+                    .frame(width: 17, height: 17)
 
                 Text(title)
                     .font(.system(size: 10, weight: .semibold))

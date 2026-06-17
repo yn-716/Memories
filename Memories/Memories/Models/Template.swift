@@ -326,6 +326,31 @@ enum ThemeIconType: String, Codable, CaseIterable, Hashable, Identifiable {
             return "birthday.cake"
         }
     }
+
+    var assetName: String {
+        switch self {
+        case .meal:
+            return "theme_food"
+        case .walk:
+            return "theme_walk"
+        case .napDog:
+            return "theme_nap_dog"
+        case .napCat:
+            return "theme_nap_cat"
+        case .travel:
+            return "theme_travel"
+        case .hospital:
+            return "theme_hospital"
+        case .shampoo:
+            return "theme_bath"
+        case .cafe:
+            return "theme_cafe"
+        case .home:
+            return "theme_home"
+        case .birthday:
+            return "theme_birthday"
+        }
+    }
 }
 
 enum WeatherType: String, Codable, CaseIterable, Hashable, Identifiable {
@@ -364,6 +389,44 @@ enum WeatherType: String, Codable, CaseIterable, Hashable, Identifiable {
             return "cloud.rain"
         case .snowy:
             return "snowflake"
+        }
+    }
+
+    var assetName: String? {
+        switch self {
+        case .none:
+            return nil
+        case .sunny:
+            return "weather_sunny"
+        case .cloudy:
+            return "weather_cloudy"
+        case .rainy:
+            return "weather_rain"
+        case .snowy:
+            return "weather_snow"
+        }
+    }
+}
+
+enum UtilityIconType {
+    case location
+    case calendar
+
+    var assetName: String {
+        switch self {
+        case .location:
+            return "utility_location"
+        case .calendar:
+            return "utility_calendar"
+        }
+    }
+
+    var fallbackSymbolName: String {
+        switch self {
+        case .location:
+            return "mappin"
+        case .calendar:
+            return "calendar"
         }
     }
 }

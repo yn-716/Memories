@@ -48,31 +48,43 @@ struct TemplateCanvasPreview: View {
     }
 
     private func overlayContent(size: CGSize) -> some View {
-        VStack(alignment: editState.selectedPosition.horizontalAlignment, spacing: max(3, size.width * 0.012)) {
+        VStack(alignment: editState.selectedPosition.horizontalAlignment, spacing: max(2, CardOverlayLayout.previewStackSpacing(for: size))) {
             if editState.visibilitySettings.showThemeIcon || shouldShowWeather {
-                HStack(spacing: max(5, CardOverlayLayout.iconSize(for: size) * CardOverlayLayout.iconSpacingRatio)) {
+                HStack(spacing: CardOverlayLayout.iconRowSpacing(for: size)) {
                     if editState.selectedPosition.isTrailing {
                         Spacer(minLength: 0)
                     }
 
                     if editState.visibilitySettings.showThemeIcon {
-                        Image(systemName: editState.selectedThemeIcon.symbolName)
-                            .font(.system(size: max(14, CardOverlayLayout.iconSize(for: size)), weight: .medium))
+                        MemoriesTemplateIcon(
+                            assetName: editState.selectedThemeIcon.assetName,
+                            fallbackSystemName: editState.selectedThemeIcon.symbolName
+                        )
+                        .frame(
+                            width: max(16, CardOverlayLayout.themeIconSize(for: size)),
+                            height: max(16, CardOverlayLayout.themeIconSize(for: size))
+                        )
                     }
 
                     if shouldShowWeather, let symbolName = editState.selectedWeather.symbolName {
-                        Image(systemName: symbolName)
-                            .font(.system(size: max(14, CardOverlayLayout.iconSize(for: size)), weight: .medium))
+                        MemoriesTemplateIcon(
+                            assetName: editState.selectedWeather.assetName,
+                            fallbackSystemName: symbolName
+                        )
+                        .frame(
+                            width: max(15, CardOverlayLayout.weatherIconSize(for: size)),
+                            height: max(15, CardOverlayLayout.weatherIconSize(for: size))
+                        )
                     }
                 }
             }
 
             if shouldShowLocation {
-                metaLine(systemImage: "mappin", text: editState.locationText, size: size)
+                metaLine(icon: .location, text: editState.locationText, size: size)
             }
 
             if shouldShowDate {
-                overlayText(editState.displayDateText, size: size, role: .meta)
+                metaLine(icon: .calendar, text: editState.displayDateText, size: size)
             }
 
             if shouldShowMainText {
@@ -103,14 +115,17 @@ struct TemplateCanvasPreview: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private func metaLine(systemImage: String, text: String, size: CGSize) -> some View {
-        HStack(spacing: max(3, size.width * 0.01)) {
+    private func metaLine(icon: UtilityIconType, text: String, size: CGSize) -> some View {
+        HStack(spacing: CardOverlayLayout.metaIconSize(for: size) * CardOverlayLayout.iconTextSpacingRatio) {
             if editState.selectedPosition.isTrailing {
                 Spacer(minLength: 0)
             }
 
-            Image(systemName: systemImage)
-                .font(font(for: .meta, size: size))
+            MemoriesTemplateIcon(assetName: icon.assetName, fallbackSystemName: icon.fallbackSymbolName)
+                .frame(
+                    width: max(9, CardOverlayLayout.metaIconSize(for: size)),
+                    height: max(9, CardOverlayLayout.metaIconSize(for: size))
+                )
 
             overlayText(text, size: size, role: .meta)
         }

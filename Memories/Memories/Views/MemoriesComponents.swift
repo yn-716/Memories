@@ -269,3 +269,21 @@ struct MemoriesGlassTextField: View {
         }
     }
 }
+
+struct MemoriesTemplateIcon: View {
+    let assetName: String?
+    let fallbackSystemName: String
+
+    var body: some View {
+        if let assetName {
+            Image(assetName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Image(systemName: fallbackSystemName)
+                .resizable()
+                .scaledToFit()
+        }
+    }
+}

@@ -9,15 +9,18 @@ enum CardOverlayTextRole {
 
 struct CardOverlayLayout {
     static let insetRatio: CGFloat = 0.055
-    static let blockWidthRatio: CGFloat = 0.78
-    static let iconSizeRatio: CGFloat = 0.057
-    static let metaIconSizeRatio: CGFloat = 0.032
-    static let iconSpacingRatio: CGFloat = 0.43
-    static let iconRowAdvanceRatio: CGFloat = 0.076
-    static let metaLineHeightRatio: CGFloat = 0.042
-    static let mainTopSpacingRatio: CGFloat = 0.020
+    static let blockWidthRatio: CGFloat = 0.84
+    static let themeIconSizeRatio: CGFloat = 0.145
+    static let weatherIconSizeRatio: CGFloat = 0.128
+    static let metaIconSizeRatio: CGFloat = 0.074
+    static let iconSpacingRatio: CGFloat = 0.08
+    static let iconTextSpacingRatio: CGFloat = 0.22
+    static let iconRowAdvanceRatio: CGFloat = 0.160
+    static let metaLineHeightRatio: CGFloat = 0.080
+    static let mainTopSpacingRatio: CGFloat = 0.012
     static let mainLineHeightRatio: CGFloat = 0.091
     static let subLineHeightRatio: CGFloat = 0.058
+    static let previewStackSpacingRatio: CGFloat = 0.006
 
     static func base(for size: CGSize) -> CGFloat {
         min(size.width, size.height)
@@ -32,11 +35,27 @@ struct CardOverlayLayout {
     }
 
     static func iconSize(for size: CGSize) -> CGFloat {
-        base(for: size) * iconSizeRatio
+        themeIconSize(for: size)
+    }
+
+    static func themeIconSize(for size: CGSize) -> CGFloat {
+        base(for: size) * themeIconSizeRatio
+    }
+
+    static func weatherIconSize(for size: CGSize) -> CGFloat {
+        base(for: size) * weatherIconSizeRatio
     }
 
     static func metaIconSize(for size: CGSize) -> CGFloat {
         base(for: size) * metaIconSizeRatio
+    }
+
+    static func iconRowSpacing(for size: CGSize) -> CGFloat {
+        themeIconSize(for: size) * iconSpacingRatio
+    }
+
+    static func previewStackSpacing(for size: CGSize) -> CGFloat {
+        base(for: size) * previewStackSpacingRatio
     }
 
     static func lineHeight(for role: CardOverlayTextRole, canvasSize: CGSize) -> CGFloat {

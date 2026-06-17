@@ -1,0 +1,41 @@
+{
+  "id": "pet_lifelog_clean_001",
+  "name": "Pet Lifelog Clean",
+  "category": "petLifelog",
+  "supportedAspectRatios": ["4:5", "1:1", "9:16"],
+  "defaultLayout": "bottomLeft",
+  "overlayStyle": {
+    "name": "Clean",
+    "defaultTextColor": "white",
+    "defaultFontRole": "clean",
+    "photoPlaceholderStartColor": "#BFD8EA",
+    "photoPlaceholderEndColor": "#8FB7D9",
+    "addsSoftShadow": true
+  },
+  "textFieldDefinitions": [
+    {
+      "id": "location",
+      "role": "location",
+      "defaultText": "Park",
+      "editable": true
+    },
+    {
+      "id": "date",
+      "role": "date",
+      "defaultText": "2026.06.17",
+      "editable": true
+    },
+    {
+      "id": "mainText",
+      "role": "mainText",
+      "defaultText": "My Pet",
+      "editable": true
+    },
+    {
+      "id": "subText",
+      "role": "subText",
+      "defaultText": "Happy day",
+      "editable": true
+    }
+  ]
+}

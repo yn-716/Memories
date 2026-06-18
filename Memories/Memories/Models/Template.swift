@@ -10,6 +10,50 @@ struct Template: Codable, Hashable, Identifiable {
     let defaultLayout: OverlayPosition
     let overlayStyle: OverlayStyle
     let textFieldDefinitions: [CardTextFieldDefinition]
+    let renderStyle: TemplateRenderStyle
+
+    init(
+        id: String,
+        name: String,
+        category: String,
+        supportedAspectRatios: [CardAspectRatio],
+        defaultLayout: OverlayPosition,
+        overlayStyle: OverlayStyle,
+        textFieldDefinitions: [CardTextFieldDefinition],
+        renderStyle: TemplateRenderStyle = .simpleCard
+    ) {
+        self.id = id
+        self.name = name
+        self.category = category
+        self.supportedAspectRatios = supportedAspectRatios
+        self.defaultLayout = defaultLayout
+        self.overlayStyle = overlayStyle
+        self.textFieldDefinitions = textFieldDefinitions
+        self.renderStyle = renderStyle
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case category
+        case supportedAspectRatios
+        case defaultLayout
+        case overlayStyle
+        case textFieldDefinitions
+        case renderStyle
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        category = try container.decode(String.self, forKey: .category)
+        supportedAspectRatios = try container.decode([CardAspectRatio].self, forKey: .supportedAspectRatios)
+        defaultLayout = try container.decode(OverlayPosition.self, forKey: .defaultLayout)
+        overlayStyle = try container.decode(OverlayStyle.self, forKey: .overlayStyle)
+        textFieldDefinitions = try container.decode([CardTextFieldDefinition].self, forKey: .textFieldDefinitions)
+        renderStyle = try container.decodeIfPresent(TemplateRenderStyle.self, forKey: .renderStyle) ?? .simpleCard
+    }
 
     var categoryDisplayName: String {
         switch category {
@@ -24,6 +68,10 @@ struct Template: Codable, Hashable, Identifiable {
         supportedAspectRatios.first ?? .fourByFive
     }
 
+    var isTicketStyle: Bool {
+        renderStyle.isTicket
+    }
+
     var previewEditState: CardEditState {
         CardEditState(
             selectedThemeIcon: .walk,
@@ -36,11 +84,45 @@ struct Template: Codable, Hashable, Identifiable {
             customDateText: "",
             mainText: "My Pet",
             subText: "Happy day",
+            ticketTitle: "MEMORY TICKET",
             selectedPosition: defaultLayout,
             selectedFontRole: overlayStyle.defaultFontRole,
             selectedTextColor: overlayStyle.defaultTextColor,
-            visibilitySettings: .allVisible
+            visibilitySettings: .allVisible,
+            photoPlacement: .default
         )
+    }
+}
+
+enum TemplateRenderStyle: String, Codable, Hashable {
+    case simpleCard
+    case ticketPortrait
+    case ticketLandscape
+
+    var isTicket: Bool {
+        self != .simpleCard
+    }
+
+    var ticketFrameAssetName: String? {
+        switch self {
+        case .simpleCard:
+            return nil
+        case .ticketPortrait:
+            return "ticket_frame_portrait"
+        case .ticketLandscape:
+            return "ticket_frame_landscape"
+        }
+    }
+
+    var outputSize: CGSize? {
+        switch self {
+        case .simpleCard:
+            return nil
+        case .ticketPortrait:
+            return CGSize(width: 1600, height: 2000)
+        case .ticketLandscape:
+            return CGSize(width: 2400, height: 1600)
+        }
     }
 }
 
@@ -69,6 +151,7 @@ enum CardTextRole: String, Codable, CaseIterable, Hashable, Identifiable {
     case date
     case mainText
     case subText
+    case ticketTitle
 
     var id: String { rawValue }
 }
@@ -107,10 +190,87 @@ struct CardEditState: Codable, Hashable {
     var customDateText: String
     var mainText: String
     var subText: String
+    var ticketTitle: String
     var selectedPosition: OverlayPosition
     var selectedFontRole: FontRole
     var selectedTextColor: TextColorOption
     var visibilitySettings: VisibilitySettings
+    var photoPlacement: PhotoPlacement
+
+    init(
+        selectedThemeIcon: ThemeIconType,
+        selectedWeather: WeatherType,
+        locationText: String,
+        dateMode: CardDateMode,
+        selectedDate: Date,
+        startDate: Date,
+        endDate: Date,
+        customDateText: String,
+        mainText: String,
+        subText: String,
+        ticketTitle: String = "MEMORY TICKET",
+        selectedPosition: OverlayPosition,
+        selectedFontRole: FontRole,
+        selectedTextColor: TextColorOption,
+        visibilitySettings: VisibilitySettings,
+        photoPlacement: PhotoPlacement = .default
+    ) {
+        self.selectedThemeIcon = selectedThemeIcon
+        self.selectedWeather = selectedWeather
+        self.locationText = locationText
+        self.dateMode = dateMode
+        self.selectedDate = selectedDate
+        self.startDate = startDate
+        self.endDate = endDate
+        self.customDateText = customDateText
+        self.mainText = mainText
+        self.subText = subText
+        self.ticketTitle = ticketTitle
+        self.selectedPosition = selectedPosition
+        self.selectedFontRole = selectedFontRole
+        self.selectedTextColor = selectedTextColor
+        self.visibilitySettings = visibilitySettings
+        self.photoPlacement = photoPlacement
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case selectedThemeIcon
+        case selectedWeather
+        case locationText
+        case dateMode
+        case selectedDate
+        case startDate
+        case endDate
+        case customDateText
+        case mainText
+        case subText
+        case ticketTitle
+        case selectedPosition
+        case selectedFontRole
+        case selectedTextColor
+        case visibilitySettings
+        case photoPlacement
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedThemeIcon = try container.decodeIfPresent(ThemeIconType.self, forKey: .selectedThemeIcon) ?? .walk
+        selectedWeather = try container.decodeIfPresent(WeatherType.self, forKey: .selectedWeather) ?? .none
+        locationText = try container.decodeIfPresent(String.self, forKey: .locationText) ?? ""
+        dateMode = try container.decodeIfPresent(CardDateMode.self, forKey: .dateMode) ?? .single
+        selectedDate = try container.decodeIfPresent(Date.self, forKey: .selectedDate) ?? Self.normalizedDate(Date())
+        startDate = try container.decodeIfPresent(Date.self, forKey: .startDate) ?? selectedDate
+        endDate = try container.decodeIfPresent(Date.self, forKey: .endDate) ?? startDate
+        customDateText = try container.decodeIfPresent(String.self, forKey: .customDateText) ?? ""
+        mainText = try container.decodeIfPresent(String.self, forKey: .mainText) ?? ""
+        subText = try container.decodeIfPresent(String.self, forKey: .subText) ?? ""
+        ticketTitle = try container.decodeIfPresent(String.self, forKey: .ticketTitle) ?? "MEMORY TICKET"
+        selectedPosition = try container.decodeIfPresent(OverlayPosition.self, forKey: .selectedPosition) ?? .bottomLeft
+        selectedFontRole = try container.decodeIfPresent(FontRole.self, forKey: .selectedFontRole) ?? .clean
+        selectedTextColor = try container.decodeIfPresent(TextColorOption.self, forKey: .selectedTextColor) ?? .white
+        visibilitySettings = try container.decodeIfPresent(VisibilitySettings.self, forKey: .visibilitySettings) ?? .newCardDefault
+        photoPlacement = try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default
+    }
 
     var dateText: String {
         displayDateText
@@ -204,6 +364,22 @@ struct VisibilitySettings: Codable, Hashable {
         showMainText: true,
         showSubText: true
     )
+}
+
+struct PhotoPlacement: Codable, Hashable {
+    var scale: Double
+    var offsetX: Double
+    var offsetY: Double
+
+    static let `default` = PhotoPlacement(scale: 1, offsetX: 0, offsetY: 0)
+
+    var clamped: PhotoPlacement {
+        PhotoPlacement(
+            scale: min(max(scale, 1), 3),
+            offsetX: min(max(offsetX, -1), 1),
+            offsetY: min(max(offsetY, -1), 1)
+        )
+    }
 }
 
 enum OverlayPosition: String, Codable, CaseIterable, Hashable, Identifiable {
@@ -628,6 +804,7 @@ enum CardAspectRatio: String, Codable, CaseIterable, Hashable, Identifiable {
     case fourByFive = "4:5"
     case square = "1:1"
     case nineBySixteen = "9:16"
+    case threeByTwo = "3:2"
 
     var id: String { rawValue }
 
@@ -643,6 +820,8 @@ enum CardAspectRatio: String, Codable, CaseIterable, Hashable, Identifiable {
             return 1
         case .nineBySixteen:
             return 9 / 16
+        case .threeByTwo:
+            return 3 / 2
         }
     }
 
@@ -654,6 +833,8 @@ enum CardAspectRatio: String, Codable, CaseIterable, Hashable, Identifiable {
             return CGSize(width: 1080, height: 1080)
         case .nineBySixteen:
             return CGSize(width: 1080, height: 1920)
+        case .threeByTwo:
+            return CGSize(width: 2400, height: 1600)
         }
     }
 }

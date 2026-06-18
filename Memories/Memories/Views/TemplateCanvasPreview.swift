@@ -6,17 +6,38 @@ struct TemplateCanvasPreview: View {
     let editState: CardEditState
     let photoImage: UIImage?
     let aspectRatio: CGFloat
+    let isPhotoAdjustmentActive: Bool
+    let onPhotoPlacementChanged: ((PhotoPlacement) -> Void)?
+
+    @State private var dragStartPlacement: PhotoPlacement?
+    @State private var magnifyStartPlacement: PhotoPlacement?
+
+    init(
+        template: Template,
+        editState: CardEditState,
+        photoImage: UIImage?,
+        aspectRatio: CGFloat,
+        isPhotoAdjustmentActive: Bool = false,
+        onPhotoPlacementChanged: ((PhotoPlacement) -> Void)? = nil
+    ) {
+        self.template = template
+        self.editState = editState
+        self.photoImage = photoImage
+        self.aspectRatio = aspectRatio
+        self.isPhotoAdjustmentActive = isPhotoAdjustmentActive
+        self.onPhotoPlacementChanged = onPhotoPlacementChanged
+    }
 
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
 
-            ZStack {
-                photoPlaceholder
-
-                overlayContent(size: size)
-                    .padding(CardOverlayLayout.inset(for: size))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: editState.selectedPosition.alignment)
+            ZStack(alignment: .topLeading) {
+                if template.renderStyle.isTicket {
+                    ticketPreview(size: size)
+                } else {
+                    simpleCardPreview(size: size)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: MemoriesTheme.cardRadius))
         }
@@ -24,27 +45,221 @@ struct TemplateCanvasPreview: View {
     }
 
     @ViewBuilder
-    private var photoPlaceholder: some View {
-        if let photoImage {
-            Image(uiImage: photoImage)
-                .resizable()
-                .scaledToFill()
-                .clipped()
+    private func simpleCardPreview(size: CGSize) -> some View {
+        let frameRect = CGRect(origin: .zero, size: size)
+
+        ZStack(alignment: .topLeading) {
+            photoLayer(frameRect: frameRect, canvasSize: size)
+
+            overlayContent(size: size)
+                .padding(CardOverlayLayout.inset(for: size))
+                .frame(width: size.width, height: size.height, alignment: editState.selectedPosition.alignment)
+        }
+        .frame(width: size.width, height: size.height)
+        .contentShape(Rectangle())
+        .gesture(photoAdjustmentGesture(frameRect: frameRect))
+    }
+
+    @ViewBuilder
+    private func ticketPreview(size: CGSize) -> some View {
+        if let layout = TicketCardLayout.layout(for: template.renderStyle, canvasSize: size) {
+            ZStack(alignment: .topLeading) {
+                Color(uiColor: TicketTypography.background)
+                    .frame(width: size.width, height: size.height)
+
+                photoLayer(frameRect: layout.photoFrame, canvasSize: size)
+
+                Image(layout.frameAssetName)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: size.width, height: size.height)
+
+                ticketOverlayContent(layout: layout, size: size)
+
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .frame(width: layout.photoFrame.width, height: layout.photoFrame.height)
+                    .position(x: layout.photoFrame.midX, y: layout.photoFrame.midY)
+                    .gesture(photoAdjustmentGesture(frameRect: layout.photoFrame))
+            }
+            .frame(width: size.width, height: size.height)
         } else {
-            LinearGradient(
-                colors: [
-                    Color(hex: template.overlayStyle.photoPlaceholderStartColor),
-                    Color(hex: template.overlayStyle.photoPlaceholderEndColor)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .overlay {
-                Image(systemName: "pawprint.fill")
-                    .font(.system(size: 46, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.36))
+            simpleCardPreview(size: size)
+        }
+    }
+
+    @ViewBuilder
+    private func photoLayer(frameRect: CGRect, canvasSize: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            if let photoImage {
+                let drawRect = PhotoPlacementLayout.drawRect(
+                    imageSize: photoImage.size,
+                    frameRect: CGRect(origin: .zero, size: frameRect.size),
+                    placement: editState.photoPlacement
+                )
+
+                Image(uiImage: photoImage)
+                    .resizable()
+                    .frame(width: drawRect.width, height: drawRect.height)
+                    .position(x: drawRect.midX, y: drawRect.midY)
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(hex: template.overlayStyle.photoPlaceholderStartColor),
+                        Color(hex: template.overlayStyle.photoPlaceholderEndColor)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .overlay {
+                    Image(systemName: "pawprint.fill")
+                        .font(.system(size: min(canvasSize.width, canvasSize.height) * 0.14, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.36))
+                }
             }
         }
+        .frame(width: frameRect.width, height: frameRect.height)
+        .clipped()
+        .position(x: frameRect.midX, y: frameRect.midY)
+    }
+
+    private func photoAdjustmentGesture(frameRect: CGRect) -> some Gesture {
+        let drag = DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                guard isPhotoAdjustmentActive, let photoImage else {
+                    return
+                }
+
+                let start = dragStartPlacement ?? editState.photoPlacement
+                dragStartPlacement = start
+                let nextPlacement = PhotoPlacementLayout.placement(
+                    from: start,
+                    applyingDrag: value.translation,
+                    imageSize: photoImage.size,
+                    frameRect: frameRect
+                )
+                onPhotoPlacementChanged?(nextPlacement)
+            }
+            .onEnded { _ in
+                dragStartPlacement = nil
+            }
+
+        let magnification = MagnificationGesture()
+            .onChanged { value in
+                guard isPhotoAdjustmentActive else {
+                    return
+                }
+
+                let start = magnifyStartPlacement ?? editState.photoPlacement
+                magnifyStartPlacement = start
+                let nextPlacement = PhotoPlacement(
+                    scale: min(max(start.scale * Double(value), 1), 3),
+                    offsetX: start.offsetX,
+                    offsetY: start.offsetY
+                ).clamped
+                onPhotoPlacementChanged?(nextPlacement)
+            }
+            .onEnded { _ in
+                magnifyStartPlacement = nil
+            }
+
+        return drag.simultaneously(with: magnification)
+    }
+
+    private func ticketOverlayContent(layout: TicketCardLayout, size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            ticketText(
+                editState.ticketTitle,
+                color: Color(uiColor: TicketTypography.mainInk),
+                font: .system(size: ticketTitleFontSize(size: size), weight: .heavy, design: .monospaced),
+                rect: layout.ticketTitleRect,
+                kerning: 1.2
+            )
+
+            if shouldShowMainText {
+                ticketText(
+                    editState.mainText,
+                    color: Color(uiColor: TicketTypography.mainInk),
+                    font: .system(size: ticketMainFontSize(size: size), weight: .bold, design: .monospaced),
+                    rect: layout.mainTextRect
+                )
+            }
+
+            ticketMetaBox(label: "DATE", value: editState.displayDateText, isVisible: editState.visibilitySettings.showDate, rect: layout.dateBoxRect, size: size)
+            ticketMetaBox(label: "PLACE", value: editState.locationText, isVisible: editState.visibilitySettings.showLocation, rect: layout.locationBoxRect, size: size)
+        }
+    }
+
+    private func ticketText(_ text: String, color: Color, font: Font, rect: CGRect, kerning: CGFloat = 0) -> some View {
+        Text(text)
+            .font(font)
+            .kerning(kerning)
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(width: rect.width, height: rect.height, alignment: .leading)
+            .position(x: rect.midX, y: rect.midY)
+    }
+
+    private func ticketMetaBox(label: String, value: String, isVisible: Bool, rect: CGRect, size: CGSize) -> some View {
+        let textRects = TicketCardLayout.labelValueRects(in: rect, canvasSize: size)
+
+        return ZStack(alignment: .topLeading) {
+            Text(label)
+                .font(.system(size: min(size.width, size.height) * 0.015, weight: .semibold, design: .monospaced))
+                .kerning(1.1)
+                .foregroundStyle(Color(uiColor: TicketTypography.labelInk))
+                .lineLimit(1)
+                .frame(width: textRects.label.width, height: textRects.label.height, alignment: .leading)
+                .position(x: textRects.label.midX - rect.minX, y: textRects.label.midY - rect.minY)
+
+            if isVisible && !value.trimmedForDisplay.isEmpty {
+                Text(value)
+                    .font(.system(size: min(size.width, size.height) * 0.024, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(uiColor: TicketTypography.mainInk))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+                    .frame(width: textRects.value.width, height: textRects.value.height, alignment: .leading)
+                    .position(x: textRects.value.midX - rect.minX, y: textRects.value.midY - rect.minY)
+            }
+        }
+        .frame(width: rect.width, height: rect.height, alignment: .topLeading)
+        .position(x: rect.midX, y: rect.midY)
+    }
+
+    @ViewBuilder
+    private func ticketIconRow(layout: TicketCardLayout, size: CGSize) -> some View {
+        let iconSize = TicketCardLayout.iconSize(for: template.renderStyle, canvasSize: size)
+
+        HStack(spacing: iconSize * 0.14) {
+            if editState.visibilitySettings.showThemeIcon {
+                MemoriesTemplateIcon(
+                    assetName: editState.selectedThemeIcon.assetName,
+                    fallbackSystemName: editState.selectedThemeIcon.symbolName
+                )
+                .frame(width: iconSize, height: iconSize)
+            }
+
+            if shouldShowWeather, let symbolName = editState.selectedWeather.symbolName {
+                MemoriesTemplateIcon(
+                    assetName: editState.selectedWeather.assetName,
+                    fallbackSystemName: symbolName
+                )
+                .frame(width: iconSize, height: iconSize)
+            }
+        }
+        .foregroundStyle(Color(uiColor: TicketTypography.mainInk))
+        .frame(width: layout.iconRowRect.width, height: layout.iconRowRect.height)
+        .position(x: layout.iconRowRect.midX, y: layout.iconRowRect.midY)
+    }
+
+    private func ticketTitleFontSize(size: CGSize) -> CGFloat {
+        min(size.width, size.height) * (template.renderStyle == .ticketLandscape ? 0.039 : 0.034)
+    }
+
+    private func ticketMainFontSize(size: CGSize) -> CGFloat {
+        min(size.width, size.height) * (template.renderStyle == .ticketLandscape ? 0.035 : 0.033)
     }
 
     private func overlayContent(size: CGSize) -> some View {

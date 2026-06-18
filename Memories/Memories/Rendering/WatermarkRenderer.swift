@@ -18,11 +18,23 @@ struct WatermarkPolicy: Hashable {
 struct WatermarkRenderer {
     private static let brandName = "Memories Pet Life"
 
-    func draw(mode: WatermarkMode, overlayPosition: OverlayPosition, in context: CGContext, size: CGSize) {
-        draw(policy: WatermarkPolicy(mode: mode), overlayPosition: overlayPosition, in: context, size: size)
+    func draw(
+        mode: WatermarkMode,
+        overlayPosition: OverlayPosition,
+        in context: CGContext,
+        size: CGSize,
+        bounds: CGRect? = nil
+    ) {
+        draw(policy: WatermarkPolicy(mode: mode), overlayPosition: overlayPosition, in: context, size: size, bounds: bounds)
     }
 
-    func draw(policy: WatermarkPolicy, overlayPosition: OverlayPosition, in context: CGContext, size: CGSize) {
+    func draw(
+        policy: WatermarkPolicy,
+        overlayPosition: OverlayPosition,
+        in context: CGContext,
+        size: CGSize,
+        bounds: CGRect? = nil
+    ) {
         guard policy.shouldShowWatermark else {
             return
         }
@@ -30,7 +42,8 @@ struct WatermarkRenderer {
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
 
-        let base = min(size.width, size.height)
+        let drawingBounds = bounds ?? CGRect(origin: .zero, size: size)
+        let base = min(drawingBounds.width, drawingBounds.height)
         let watermarkPosition = Self.oppositeWatermarkPosition(for: overlayPosition)
         let pillHeight = max(34, base * 0.068)
         let iconSide = pillHeight * 0.62
@@ -51,7 +64,7 @@ struct WatermarkRenderer {
             for: watermarkPosition,
             watermarkSize: CGSize(width: pillWidth, height: pillHeight),
             inset: inset,
-            canvasSize: size
+            bounds: drawingBounds
         )
         let rect = CGRect(origin: origin, size: CGSize(width: pillWidth, height: pillHeight))
 
@@ -99,9 +112,9 @@ struct WatermarkRenderer {
         }
     }
 
-    private func origin(for position: OverlayPosition, watermarkSize: CGSize, inset: CGFloat, canvasSize: CGSize) -> CGPoint {
-        let x = position.isTrailing ? canvasSize.width - inset - watermarkSize.width : inset
-        let y = position.isBottom ? canvasSize.height - inset - watermarkSize.height : inset
+    private func origin(for position: OverlayPosition, watermarkSize: CGSize, inset: CGFloat, bounds: CGRect) -> CGPoint {
+        let x = position.isTrailing ? bounds.maxX - inset - watermarkSize.width : bounds.minX + inset
+        let y = position.isBottom ? bounds.maxY - inset - watermarkSize.height : bounds.minY + inset
         return CGPoint(x: x, y: y)
     }
 

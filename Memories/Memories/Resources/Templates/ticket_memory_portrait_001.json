@@ -1,19 +1,25 @@
 {
-  "id": "pet_lifelog_clean_001",
-  "name": "Pet Lifelog Clean",
+  "id": "ticket_memory_portrait_001",
+  "name": "Ticket Memory Portrait",
   "category": "petLifelog",
-  "renderStyle": "simpleCard",
-  "supportedAspectRatios": ["4:5", "1:1", "9:16"],
+  "renderStyle": "ticketPortrait",
+  "supportedAspectRatios": ["4:5"],
   "defaultLayout": "bottomLeft",
   "overlayStyle": {
-    "name": "Clean",
+    "name": "Ticket",
     "defaultTextColor": "white",
-    "defaultFontRole": "clean",
-    "photoPlaceholderStartColor": "#BFD8EA",
+    "defaultFontRole": "soft",
+    "photoPlaceholderStartColor": "#D8E8F5",
     "photoPlaceholderEndColor": "#8FB7D9",
-    "addsSoftShadow": true
+    "addsSoftShadow": false
   },
   "textFieldDefinitions": [
+    {
+      "id": "ticketTitle",
+      "role": "ticketTitle",
+      "defaultText": "MEMORY TICKET",
+      "editable": true
+    },
     {
       "id": "location",
       "role": "location",
@@ -30,12 +36,6 @@
       "id": "mainText",
       "role": "mainText",
       "defaultText": "My Pet",
-      "editable": true
-    },
-    {
-      "id": "subText",
-      "role": "subText",
-      "defaultText": "Happy day",
       "editable": true
     }
   ]

@@ -17,7 +17,10 @@ struct TemplateRenderConfiguration {
         self.template = template
         self.editState = editState
         self.photoImage = photoImage
-        self.outputSize = outputSize ?? photoImage?.preferredRenderSize ?? CardAspectRatio.fourByFive.outputSize
+        self.outputSize = outputSize
+            ?? template.renderStyle.outputSize
+            ?? photoImage?.preferredRenderSize
+            ?? CardAspectRatio.fourByFive.outputSize
         self.watermarkMode = watermarkMode
     }
 }
@@ -31,9 +34,15 @@ final class TemplateRenderer {
         let renderer = UIGraphicsImageRenderer(size: configuration.outputSize, format: format)
         return renderer.image { context in
             let cgContext = context.cgContext
+            if configuration.template.renderStyle.isTicket {
+                drawTicketCard(configuration: configuration, in: cgContext)
+                return
+            }
+
             drawPhotoLayer(
                 image: configuration.photoImage,
                 template: configuration.template,
+                editState: configuration.editState,
                 in: cgContext,
                 size: configuration.outputSize
             )
@@ -55,13 +64,14 @@ final class TemplateRenderer {
     private func drawPhotoLayer(
         image: UIImage?,
         template: Template,
+        editState: CardEditState,
         in context: CGContext,
         size: CGSize
     ) {
         let rect = CGRect(origin: .zero, size: size)
 
         if let image {
-            drawAspectFillImage(image, in: rect)
+            drawAspectFillImage(image, in: rect, placement: editState.photoPlacement)
             return
         }
 
@@ -96,23 +106,224 @@ final class TemplateRenderer {
         pawSymbol?.draw(in: symbolRect)
     }
 
-    private func drawAspectFillImage(_ image: UIImage, in rect: CGRect) {
+    private func drawAspectFillImage(_ image: UIImage, in rect: CGRect, placement: PhotoPlacement) {
         let imageSize = image.size
         guard imageSize.width > 0, imageSize.height > 0 else {
             return
         }
 
-        let scale = max(rect.width / imageSize.width, rect.height / imageSize.height)
-        let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        let drawRect = CGRect(
-            x: rect.midX - drawSize.width / 2,
-            y: rect.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
-
         UIBezierPath(rect: rect).addClip()
+        let drawRect = PhotoPlacementLayout.drawRect(imageSize: imageSize, frameRect: rect, placement: placement)
         image.draw(in: drawRect)
+    }
+
+    private func drawTicketCard(configuration: TemplateRenderConfiguration, in context: CGContext) {
+        let size = configuration.outputSize
+        let canvasRect = CGRect(origin: .zero, size: size)
+
+        context.setFillColor(TicketTypography.background.cgColor)
+        context.fill(canvasRect)
+
+        guard let layout = TicketCardLayout.layout(for: configuration.template.renderStyle, canvasSize: size) else {
+            return
+        }
+
+        context.saveGState()
+        UIGraphicsPushContext(context)
+        if let image = configuration.photoImage {
+            PhotoPlacementLayout.drawImage(image, in: layout.photoFrame, placement: configuration.editState.photoPlacement)
+        } else {
+            drawTicketPhotoPlaceholder(in: layout.photoFrame, template: configuration.template)
+        }
+        UIGraphicsPopContext()
+        context.restoreGState()
+
+        UIGraphicsPushContext(context)
+        UIImage(named: layout.frameAssetName)?.draw(in: canvasRect)
+        drawTicketText(layout: layout, editState: configuration.editState, renderStyle: configuration.template.renderStyle, canvasSize: size)
+        UIGraphicsPopContext()
+
+        WatermarkRenderer().draw(
+            mode: configuration.watermarkMode,
+            overlayPosition: .bottomLeft,
+            in: context,
+            size: size,
+            bounds: layout.photoFrame
+        )
+    }
+
+    private func drawTicketPhotoPlaceholder(in rect: CGRect, template: Template) {
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return
+        }
+
+        context.saveGState()
+        UIBezierPath(rect: rect).addClip()
+        let colors = [
+            UIColor(hex: template.overlayStyle.photoPlaceholderStartColor).cgColor,
+            UIColor(hex: template.overlayStyle.photoPlaceholderEndColor).cgColor
+        ]
+        let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors as CFArray,
+            locations: [0, 1]
+        )
+        if let gradient {
+            context.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: rect.minX, y: rect.minY),
+                end: CGPoint(x: rect.maxX, y: rect.maxY),
+                options: []
+            )
+        } else {
+            TicketTypography.background.setFill()
+            UIBezierPath(rect: rect).fill()
+        }
+        context.restoreGState()
+    }
+
+    private func drawTicketText(
+        layout: TicketCardLayout,
+        editState: CardEditState,
+        renderStyle: TemplateRenderStyle,
+        canvasSize: CGSize
+    ) {
+        drawTicketTitle(editState.ticketTitle, in: layout.ticketTitleRect, renderStyle: renderStyle, canvasSize: canvasSize)
+        drawTicketMain(editState: editState, in: layout.mainTextRect, renderStyle: renderStyle, canvasSize: canvasSize)
+        drawTicketMetaBox(label: "DATE", value: editState.displayDateText, isVisible: editState.visibilitySettings.showDate, in: layout.dateBoxRect, canvasSize: canvasSize)
+        drawTicketMetaBox(label: "PLACE", value: editState.locationText, isVisible: editState.visibilitySettings.showLocation, in: layout.locationBoxRect, canvasSize: canvasSize)
+    }
+
+    private func drawTicketTitle(_ title: String, in rect: CGRect, renderStyle: TemplateRenderStyle, canvasSize: CGSize) {
+        let base = min(canvasSize.width, canvasSize.height)
+        let fontSize = base * (renderStyle == .ticketLandscape ? 0.039 : 0.034)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: ticketFont(size: fontSize, weight: .heavy),
+            .foregroundColor: TicketTypography.mainInk,
+            .kern: 1.4
+        ]
+        drawTicketString(title.trimmedForRenderer, verticallyCenteredIn: rect, attributes: attributes)
+    }
+
+    private func drawTicketMain(editState: CardEditState, in rect: CGRect, renderStyle: TemplateRenderStyle, canvasSize: CGSize) {
+        guard editState.visibilitySettings.showMainText, !editState.mainText.trimmedForRenderer.isEmpty else {
+            return
+        }
+
+        let base = min(canvasSize.width, canvasSize.height)
+        let fontSize = base * (renderStyle == .ticketLandscape ? 0.035 : 0.033)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: ticketFont(size: fontSize, weight: .bold),
+            .foregroundColor: TicketTypography.mainInk
+        ]
+        drawTicketString(editState.mainText.trimmedForRenderer, verticallyCenteredIn: rect, attributes: attributes)
+    }
+
+    private func drawTicketMetaBox(label: String, value: String, isVisible: Bool, in rect: CGRect, canvasSize: CGSize) {
+        guard isVisible, !value.trimmedForRenderer.isEmpty else {
+            return
+        }
+
+        let base = min(canvasSize.width, canvasSize.height)
+        let labelFontSize = base * 0.015
+        let valueFontSize = base * 0.024
+        let labelAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.monospacedSystemFont(ofSize: labelFontSize, weight: .semibold),
+            .foregroundColor: TicketTypography.labelInk,
+            .kern: 1.2
+        ]
+        let valueAttributes: [NSAttributedString.Key: Any] = [
+            .font: ticketFont(size: valueFontSize, weight: .semibold),
+            .foregroundColor: TicketTypography.mainInk
+        ]
+        let textRects = TicketCardLayout.labelValueRects(in: rect, canvasSize: canvasSize)
+        drawTicketString(label, in: textRects.label, attributes: labelAttributes)
+        drawTicketString(value.trimmedForRenderer, in: textRects.value, attributes: valueAttributes)
+    }
+
+    private func drawTicketIconRow(
+        layout: TicketCardLayout,
+        editState: CardEditState,
+        renderStyle: TemplateRenderStyle,
+        canvasSize: CGSize
+    ) {
+        var icons: [(assetName: String?, fallbackSymbolName: String)] = []
+        if editState.visibilitySettings.showThemeIcon {
+            icons.append((editState.selectedThemeIcon.assetName, editState.selectedThemeIcon.symbolName))
+        }
+        if shouldDrawWeather(editState), let weatherSymbol = editState.selectedWeather.symbolName {
+            icons.append((editState.selectedWeather.assetName, weatherSymbol))
+        }
+        guard !icons.isEmpty else {
+            return
+        }
+
+        let iconSize = TicketCardLayout.iconSize(for: renderStyle, canvasSize: canvasSize)
+        let spacing = iconSize * 0.14
+        let totalWidth = CGFloat(icons.count) * iconSize + CGFloat(max(0, icons.count - 1)) * spacing
+        var cursorX = layout.iconRowRect.midX - totalWidth / 2
+        let y = layout.iconRowRect.midY - iconSize / 2
+
+        for icon in icons {
+            drawTemplateIcon(
+                assetName: icon.assetName,
+                fallbackSymbolName: icon.fallbackSymbolName,
+                tintColor: TicketTypography.mainInk,
+                in: CGRect(x: cursorX, y: y, width: iconSize, height: iconSize)
+            )
+            cursorX += iconSize + spacing
+        }
+    }
+
+    private func drawTicketString(_ text: String, in rect: CGRect, attributes: [NSAttributedString.Key: Any]) {
+        guard !text.isEmpty else {
+            return
+        }
+
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.alignment = .left
+        var nextAttributes = attributes
+        nextAttributes[.paragraphStyle] = paragraph
+
+        NSString(string: text).draw(
+            with: rect,
+            options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine],
+            attributes: nextAttributes,
+            context: nil
+        )
+    }
+
+    private func drawTicketString(_ text: String, verticallyCenteredIn rect: CGRect, attributes: [NSAttributedString.Key: Any]) {
+        guard !text.isEmpty else {
+            return
+        }
+
+        let measuredSize = NSString(string: text).boundingRect(
+            with: CGSize(width: rect.width, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        ).size
+        let centeredRect = CGRect(
+            x: rect.minX,
+            y: rect.midY - ceil(measuredSize.height) / 2,
+            width: rect.width,
+            height: max(rect.height, ceil(measuredSize.height))
+        )
+        drawTicketString(text, in: centeredRect, attributes: attributes)
+    }
+
+    private func ticketFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        UIFont.monospacedSystemFont(ofSize: size, weight: weight)
+    }
+
+    private func roundedFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let baseFont = UIFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = baseFont.fontDescriptor.withDesign(.rounded) {
+            return UIFont(descriptor: descriptor, size: size)
+        }
+        return baseFont
     }
 
     private func drawOverlay(

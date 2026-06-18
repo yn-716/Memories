@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 struct HomeView: View {
-    private let template = TemplateRepository.bundled.loadTemplates().templates.first ?? .previewPetLifelog
+    private let templates = TemplateRepository.bundled.loadTemplates().templates
 
     @EnvironmentObject private var appState: MemoriesAppState
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -12,6 +12,8 @@ struct HomeView: View {
     @State private var photoErrorMessage: String?
     @State private var showPurchase = false
     @State private var showPhotoPicker = false
+    @State private var showStyleSelection = false
+    @State private var selectedCreationStyle: CardCreationStyle = .ticketFrame
     @State private var showDraftFullBeforeEdit = false
     @State private var showDrafts = false
 
@@ -103,13 +105,22 @@ struct HomeView: View {
             .sheet(isPresented: $showPurchase) {
                 PurchaseView()
             }
+            .sheet(isPresented: $showStyleSelection) {
+                StyleSelectionView { style in
+                    selectedCreationStyle = style
+                    showStyleSelection = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                        showPhotoPicker = true
+                    }
+                }
+            }
             .alert(appState.t("drafts.full.title"), isPresented: $showDraftFullBeforeEdit) {
                 Button(appState.t("drafts.manage")) {
                     showDrafts = true
                 }
 
                 Button(appState.t("editor.continue")) {
-                    showPhotoPicker = true
+                    showStyleSelection = true
                 }
 
                 Button(appState.t("common.cancel"), role: .cancel) {}
@@ -149,7 +160,7 @@ struct HomeView: View {
         if DraftRepository.shared.loadDrafts().count >= appState.draftLimit {
             showDraftFullBeforeEdit = true
         } else {
-            showPhotoPicker = true
+            showStyleSelection = true
         }
     }
 
@@ -179,7 +190,8 @@ struct HomeView: View {
                 from: data,
                 allowsLocationSuggestion: appState.suggestPlaceFromPhotoLocation
             )
-            let initialEditState = initialEditState(from: metadata)
+            let template = template(for: selectedCreationStyle, photoImage: image)
+            let initialEditState = initialEditState(from: metadata, template: template)
             editorRoute = EditorRoute(
                 template: template,
                 photoImage: image,
@@ -190,7 +202,7 @@ struct HomeView: View {
         }
     }
 
-    private func initialEditState(from metadata: PhotoMetadata) -> CardEditState {
+    private func initialEditState(from metadata: PhotoMetadata, template: Template) -> CardEditState {
         var state = CardEditState.newCard(
             defaultLayout: template.defaultLayout,
             fontRole: template.overlayStyle.defaultFontRole,
@@ -204,6 +216,148 @@ struct HomeView: View {
         }
 
         return state
+    }
+
+    private func template(for style: CardCreationStyle, photoImage: UIImage) -> Template {
+        switch style {
+        case .ticketFrame:
+            let aspectRatio = photoImage.size.width / max(photoImage.size.height, 1)
+            let renderStyle: TemplateRenderStyle = aspectRatio >= 1.15 ? .ticketLandscape : .ticketPortrait
+            return templates.first(where: { $0.renderStyle == renderStyle })
+                ?? templates.first(where: { $0.renderStyle.isTicket })
+                ?? simpleTemplate
+        case .simpleCard:
+            return simpleTemplate
+        }
+    }
+
+    private var simpleTemplate: Template {
+        templates.first(where: { $0.renderStyle == .simpleCard }) ?? .previewPetLifelog
+    }
+}
+
+private enum CardCreationStyle: CaseIterable, Identifiable {
+    case ticketFrame
+    case simpleCard
+
+    var id: Self { self }
+
+    func title(language: ResolvedAppLanguage) -> String {
+        switch self {
+        case .ticketFrame:
+            return MemoriesLocalization.text("style.ticketFrame", language: language)
+        case .simpleCard:
+            return MemoriesLocalization.text("style.simpleCard", language: language)
+        }
+    }
+
+    func description(language: ResolvedAppLanguage) -> String {
+        switch self {
+        case .ticketFrame:
+            return MemoriesLocalization.text("style.ticketFrameDescription", language: language)
+        case .simpleCard:
+            return MemoriesLocalization.text("style.simpleCardDescription", language: language)
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .ticketFrame:
+            return "ticket"
+        case .simpleCard:
+            return "photo.on.rectangle"
+        }
+    }
+}
+
+private struct StyleSelectionView: View {
+    let onSelect: (CardCreationStyle) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: MemoriesAppState
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                MemoriesTheme.background.ignoresSafeArea()
+
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(appState.t("style.chooseTitle"))
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                        .lineLimit(2)
+
+                    VStack(spacing: 12) {
+                        ForEach(CardCreationStyle.allCases) { style in
+                            Button {
+                                onSelect(style)
+                            } label: {
+                                StyleSelectionRow(style: style)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(22)
+                .frame(maxWidth: MemoriesLayoutMetrics.sheetMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+            }
+            .navigationTitle("")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(appState.t("common.cancel")) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .presentationDetents([.height(360), .medium])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct StyleSelectionRow: View {
+    let style: CardCreationStyle
+
+    @EnvironmentObject private var appState: MemoriesAppState
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: style.systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.accentDeep)
+                .frame(width: 42, height: 42)
+                .background(MemoriesTheme.subBackground.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(style.title(language: appState.resolvedLanguage))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textMain)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(style.description(language: appState.resolvedLanguage))
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(MemoriesTheme.textSub)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textSub)
+        }
+        .padding(15)
+        .background(.ultraThinMaterial)
+        .background(MemoriesTheme.card.opacity(0.54))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+        }
     }
 }
 

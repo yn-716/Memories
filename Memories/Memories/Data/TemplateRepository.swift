@@ -46,7 +46,11 @@ struct BundleTemplateSource: TemplateSource {
 
     init(
         bundle: Bundle = .main,
-        templateResourceNames: [String] = ["pet_lifelog_clean_001"],
+        templateResourceNames: [String] = [
+            "pet_lifelog_clean_001",
+            "ticket_memory_portrait_001",
+            "ticket_memory_landscape_001"
+        ],
         searchSubdirectories: [String?] = ["Templates", "Resources/Templates", nil]
     ) {
         self.bundle = bundle

@@ -258,6 +258,12 @@ struct EditorView: View {
             updateKeyboardHeight(from: notification)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onAppear {
+            normalizeEditorSelection()
+        }
+        .onChange(of: selectedTab) { _, _ in
+            normalizeEditorSelection()
+        }
     }
 
     private func previewArea(referenceAreaHeight: CGFloat) -> some View {
@@ -280,7 +286,11 @@ struct EditorView: View {
                     template: template,
                     editState: editState,
                     photoImage: photoImage,
-                    aspectRatio: photoAspectRatio
+                    aspectRatio: photoAspectRatio,
+                    isPhotoAdjustmentActive: true,
+                    onPhotoPlacementChanged: { placement in
+                        editState.photoPlacement = placement
+                    }
                 )
                 .frame(width: referenceWidth, height: referenceHeight)
                 .scaleEffect(previewScale)
@@ -313,7 +323,7 @@ struct EditorView: View {
 
     private var tabBar: some View {
         HStack(spacing: 7) {
-            ForEach(EditorPanelTab.allCases) { tab in
+            ForEach(availableTabs) { tab in
                 MemoriesPillTab(title: tab.title(language: appState.resolvedLanguage), isSelected: selectedTab == tab) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         selectedTab = tab
@@ -334,6 +344,8 @@ struct EditorView: View {
             appearanceTab
         case .position:
             positionTab
+        case .photo:
+            photoTab
         }
     }
 
@@ -349,7 +361,7 @@ struct EditorView: View {
                 }
 
                 HStack(spacing: 6) {
-                    ForEach(TextEditTarget.allCases) { target in
+                    ForEach(availableTextTargets) { target in
                         SubItemChip(
                             title: target.title(language: appState.resolvedLanguage),
                             isSelected: selectedTextTarget == target
@@ -373,7 +385,9 @@ struct EditorView: View {
 
                     Spacer()
 
-                    CompactVisibilityToggle(isOn: visibilityBinding(for: target))
+                    if target != .ticketTitle {
+                        CompactVisibilityToggle(isOn: visibilityBinding(for: target))
+                    }
                 }
 
                 if !isKeyboardVisible {
@@ -607,6 +621,66 @@ struct EditorView: View {
         .padding(.top, 2)
     }
 
+    private var photoTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Label(appState.t("editor.adjustPhotoPosition"), systemImage: "photo")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textMain)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        editState.photoPlacement = .default
+                    }
+                } label: {
+                    Text(appState.t("editor.resetPhoto"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.accentDeep)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(MemoriesTheme.card.opacity(0.54))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(MemoriesTheme.border.opacity(0.7), lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text(appState.t("editor.zoom"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textSub)
+
+                    Spacer()
+
+                    Text(String(format: "%.1fx", editState.photoPlacement.scale))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                }
+
+                Slider(value: photoScaleBinding, in: 1...3)
+                    .tint(MemoriesTheme.accentDeep)
+            }
+
+            Text(appState.t("editor.dragPhotoHint"))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(MemoriesTheme.textSub)
+                .lineLimit(2)
+        }
+        .padding(12)
+        .background(MemoriesTheme.card.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.62), lineWidth: 1)
+        }
+    }
+
     private var iconVisibilityBinding: Binding<Bool> {
         switch selectedIconSection {
         case .theme:
@@ -651,11 +725,44 @@ struct EditorView: View {
     }
 
     private var photoAspectRatio: CGFloat {
+        if let ticketAspectRatio = TicketCardLayout.aspectRatio(for: template.renderStyle) {
+            return ticketAspectRatio
+        }
+
         guard let photoImage, photoImage.size.width > 0, photoImage.size.height > 0 else {
             return template.defaultAspectRatio.value
         }
 
         return photoImage.size.width / photoImage.size.height
+    }
+
+    private var availableTabs: [EditorPanelTab] {
+        if template.isTicketStyle {
+            return [.text]
+        }
+
+        return [.text, .icon, .appearance, .position]
+    }
+
+    private var availableTextTargets: [TextEditTarget] {
+        if template.isTicketStyle {
+            return [.ticketTitle, .main, .location, .date]
+        }
+
+        return [.main, .sub, .location, .date]
+    }
+
+    private var photoScaleBinding: Binding<Double> {
+        Binding(
+            get: { editState.photoPlacement.clamped.scale },
+            set: { newValue in
+                editState.photoPlacement = PhotoPlacement(
+                    scale: newValue,
+                    offsetX: editState.photoPlacement.offsetX,
+                    offsetY: editState.photoPlacement.offsetY
+                ).clamped
+            }
+        )
     }
 
     private func handleBack() {
@@ -668,6 +775,8 @@ struct EditorView: View {
 
     private func textBinding(for target: TextEditTarget) -> Binding<String> {
         switch target {
+        case .ticketTitle:
+            return $editState.ticketTitle
         case .main:
             return $editState.mainText
         case .sub:
@@ -699,6 +808,8 @@ struct EditorView: View {
 
     private func visibilityBinding(for target: TextEditTarget) -> Binding<Bool> {
         switch target {
+        case .ticketTitle:
+            return .constant(true)
         case .main:
             return $editState.visibilitySettings.showMainText
         case .sub:
@@ -714,6 +825,16 @@ struct EditorView: View {
         editState.selectedDate = CardEditState.normalizedDate(editState.selectedDate)
         editState.startDate = CardEditState.normalizedDate(editState.startDate)
         editState.endDate = max(editState.startDate, CardEditState.normalizedDate(editState.endDate))
+    }
+
+    private func normalizeEditorSelection() {
+        if !availableTabs.contains(selectedTab) {
+            selectedTab = .text
+        }
+
+        if !availableTextTargets.contains(selectedTextTarget) {
+            selectedTextTarget = availableTextTargets.first ?? .main
+        }
     }
 
     @MainActor
@@ -829,14 +950,17 @@ private func limitedEditState(_ editState: CardEditState) -> CardEditState {
     var limitedState = editState
     limitedState.mainText = limited(limitedState.mainText, to: CardTextLimits.main)
     limitedState.subText = limited(limitedState.subText, to: CardTextLimits.sub)
+    limitedState.ticketTitle = limited(limitedState.ticketTitle, to: CardTextLimits.ticketTitle)
     limitedState.locationText = limited(limitedState.locationText, to: CardTextLimits.location)
     limitedState.customDateText = limited(limitedState.customDateText, to: CardTextLimits.customDate)
+    limitedState.photoPlacement = limitedState.photoPlacement.clamped
     return limitedState
 }
 
 private enum CardTextLimits {
     static let main = 30
     static let sub = 40
+    static let ticketTitle = 24
     static let location = 30
     static let customDate = 30
 }
@@ -1146,6 +1270,7 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
     case icon
     case appearance
     case position
+    case photo
 
     var id: Self { self }
 
@@ -1159,11 +1284,14 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
             return MemoriesLocalization.text("editor.appearance", language: language)
         case .position:
             return MemoriesLocalization.text("editor.position", language: language)
+        case .photo:
+            return MemoriesLocalization.text("editor.photo", language: language)
         }
     }
 }
 
 private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
+    case ticketTitle
     case main
     case sub
     case location
@@ -1173,6 +1301,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     func title(language: ResolvedAppLanguage) -> String {
         switch self {
+        case .ticketTitle:
+            return MemoriesLocalization.text("editor.ticketTitle", language: language)
         case .main:
             return MemoriesLocalization.text("editor.main", language: language)
         case .sub:
@@ -1186,6 +1316,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     func editorTitle(language: ResolvedAppLanguage) -> String {
         switch self {
+        case .ticketTitle:
+            return MemoriesLocalization.text("editor.ticketTitle", language: language)
         case .main:
             return MemoriesLocalization.text("editor.mainText", language: language)
         case .sub:
@@ -1199,6 +1331,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     func placeholder(language: ResolvedAppLanguage) -> String {
         switch self {
+        case .ticketTitle:
+            return "MEMORY TICKET"
         case .main:
             return MemoriesLocalization.text("editor.mainPlaceholder", language: language)
         case .sub:
@@ -1212,6 +1346,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     func hint(language: ResolvedAppLanguage) -> String {
         switch self {
+        case .ticketTitle:
+            return MemoriesLocalization.text("editor.ticketTitleHint", language: language)
         case .main:
             return MemoriesLocalization.text("editor.mainHint", language: language)
         case .sub:
@@ -1225,6 +1361,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     var characterLimit: Int {
         switch self {
+        case .ticketTitle:
+            return CardTextLimits.ticketTitle
         case .main:
             return CardTextLimits.main
         case .sub:
@@ -1238,6 +1376,8 @@ private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
 
     var systemImage: String {
         switch self {
+        case .ticketTitle:
+            return "ticket"
         case .main:
             return "textformat.size"
         case .sub:

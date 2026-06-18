@@ -100,19 +100,19 @@ struct PreviewSaveView: View {
             Text(appState.t("preview.confirmShareMessage"))
         }
         .alert(appState.t("preview.saveComplete"), isPresented: $showExistingDraftDecision) {
-            Button(appState.t("preview.deleteDraft"), role: .destructive) {
-                deleteCurrentDraft()
-            }
-
             Button(appState.t("preview.keepDraft")) {
                 Task {
                     await updateCurrentDraftAfterPhotoSave()
                 }
             }
 
-            Button(appState.t("editor.continue"), role: .cancel) {}
+            Button(appState.t("preview.deleteDraft"), role: .destructive) {
+                deleteCurrentDraft()
+            }
+
+            Button(appState.t("preview.decideLater"), role: .cancel) {}
         } message: {
-            Text(appState.t("preview.deleteDraftQuestion"))
+            Text(appState.t("preview.keepExistingDraftQuestion"))
         }
         .alert(appState.t("preview.saveComplete"), isPresented: $showNewDraftDecision) {
             Button(appState.t("preview.saveDraft")) {
@@ -126,9 +126,9 @@ struct PreviewSaveView: View {
                 onFinishWithoutDraft()
             }
 
-            Button(appState.t("editor.continue"), role: .cancel) {}
+            Button(appState.t("preview.decideLater"), role: .cancel) {}
         } message: {
-            Text(appState.t("preview.keepDraftQuestion"))
+            Text(appState.t("preview.saveNewDraftQuestion"))
         }
         .alert(appState.t("drafts.full.title"), isPresented: $showDraftLimitAlert) {
             Button(appState.t("drafts.manage")) {

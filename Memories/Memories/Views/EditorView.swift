@@ -1426,5 +1426,6 @@ private extension String {
     NavigationStack {
         EditorView(template: .previewPetLifelog)
             .environmentObject(MemoriesAppState())
+            .environmentObject(StoreKitManager())
     }
 }

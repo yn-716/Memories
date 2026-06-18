@@ -1,8 +1,8 @@
-import StoreKit
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
 
     #if DEBUG
     @State private var showDebugResetAlert = false
@@ -48,7 +48,6 @@ struct SettingsView: View {
         #else
         content
         #endif
-        // TODO: StoreKit商品ID確定後、購入状態の起動時同期をPhase 2で強化する。
     }
 
     private var planSection: some View {
@@ -212,11 +211,13 @@ struct SettingsView: View {
         isRestoring = true
         defer { isRestoring = false }
 
-        do {
-            try await AppStore.sync()
-            await appState.applyCurrentEntitlements()
+        let result = await storeKitManager.restorePurchases()
+        switch result {
+        case .restored:
             settingsAlert = SettingsAlert(title: appState.t("purchase.restored"), message: nil)
-        } catch {
+        case .noPurchases:
+            settingsAlert = SettingsAlert(title: appState.t("purchase.noRestoredPurchases"), message: nil)
+        case .failed(let error):
             settingsAlert = SettingsAlert(title: appState.t("purchase.restoreFailed"), message: error.localizedDescription)
         }
     }
@@ -232,5 +233,6 @@ private struct SettingsAlert: Identifiable {
     NavigationStack {
         SettingsView()
             .environmentObject(MemoriesAppState())
+            .environmentObject(StoreKitManager())
     }
 }

@@ -219,10 +219,13 @@ enum MemoriesLocalization {
         "purchase.restore": "購入を復元",
         "purchase.completed": "購入が完了しました",
         "purchase.failed": "購入できませんでした",
+        "purchase.cancelled": "購入をキャンセルしました",
+        "purchase.pending": "購入は保留中です",
         "purchase.productsFailed": "商品情報を取得できませんでした",
         "purchase.tryAgainLater": "時間をおいて再度お試しください",
         "purchase.unavailable": "—",
         "purchase.restored": "購入情報を復元しました",
+        "purchase.noRestoredPurchases": "復元できる購入はありませんでした",
         "purchase.restoreFailed": "購入情報を復元できませんでした",
         "purchase.comingSoon": "商品情報を確認中です"
     ]
@@ -389,10 +392,13 @@ enum MemoriesLocalization {
         "purchase.restore": "Restore",
         "purchase.completed": "Purchase completed",
         "purchase.failed": "Purchase failed",
+        "purchase.cancelled": "Purchase cancelled",
+        "purchase.pending": "Purchase pending",
         "purchase.productsFailed": "Products could not be loaded",
         "purchase.tryAgainLater": "Please try again later",
         "purchase.unavailable": "—",
         "purchase.restored": "Purchases restored",
+        "purchase.noRestoredPurchases": "No purchases to restore",
         "purchase.restoreFailed": "Could not restore purchases",
         "purchase.comingSoon": "Checking product information"
     ]

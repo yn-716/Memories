@@ -1,0 +1,64 @@
+{
+  "identifier" : "6E2C6E92-3D98-4E52-A6C7-5A239D59A8B7",
+  "products" : [
+    {
+      "displayPrice" : "900",
+      "familyShareable" : false,
+      "internalID" : "B7D3F0B2-E297-489A-B675-6D8ACF7C8343",
+      "localizations" : [
+        {
+          "description" : "ずっとウォーターマークなしで保存できます。",
+          "displayName" : "永久パス",
+          "locale" : "ja_JP"
+        },
+        {
+          "description" : "Save without a watermark forever.",
+          "displayName" : "Lifetime Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "memories.lifetime.pass",
+      "referenceName" : "Lifetime Pass",
+      "type" : "NonConsumable"
+    }
+  ],
+  "nonRenewingSubscriptions" : [
+    {
+      "displayPrice" : "300",
+      "familyShareable" : false,
+      "internalID" : "08B4D206-5414-4E0B-9E00-5C803F6D01A9",
+      "localizations" : [
+        {
+          "description" : "7日間、ウォーターマークなしで保存できます。",
+          "displayName" : "7日間パス",
+          "locale" : "ja_JP"
+        },
+        {
+          "description" : "Save without a watermark for 7 days.",
+          "displayName" : "7-Day Pass",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "memories.7day.pass",
+      "referenceName" : "7-Day Pass",
+      "type" : "nonRenewingSubscription"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6745921180",
+    "_developerTeamID" : "8PV98WQSVZ",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ja_JP",
+    "_storefront" : "JPN",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

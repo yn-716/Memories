@@ -8,6 +8,7 @@
 
 /* Begin PBXFileReference section */
 		D9CF3A782FE159CD00ECB6F7 /* Memories.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memories.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D9CF3BEA2FE3A6C800ECB6F7 /* Memories.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Memories.storekit; path = StoreKit/Memories.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,6 +33,7 @@
 		D9CF3A6F2FE159CD00ECB6F7 = {
 			isa = PBXGroup;
 			children = (
+				D9CF3BEA2FE3A6C800ECB6F7 /* Memories.storekit */,
 				D9CF3A7A2FE159CD00ECB6F7 /* Memories */,
 				D9CF3A792FE159CD00ECB6F7 /* Products */,
 			);
@@ -55,6 +57,7 @@
 				D9CF3A742FE159CD00ECB6F7 /* Sources */,
 				D9CF3A752FE159CD00ECB6F7 /* Frameworks */,
 				D9CF3A762FE159CD00ECB6F7 /* Resources */,
+				D9CF3BEB2FE3B00000ECB6F7 /* Copy Debug StoreKit Configuration */,
 			);
 			buildRules = (
 			);
@@ -113,6 +116,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		D9CF3BEB2FE3B00000ECB6F7 /* Copy Debug StoreKit Configuration */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/StoreKit/Memories.storekit",
+			);
+			name = "Copy Debug StoreKit Configuration";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Memories.storekit",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Debug\" ]; then\n  STOREKIT_SOURCE=\"$SRCROOT/StoreKit/Memories.storekit\"\n  STOREKIT_DESTINATION=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Memories.storekit\"\n  if [ -f \"$STOREKIT_SOURCE\" ]; then\n    cp \"$STOREKIT_SOURCE\" \"$STOREKIT_DESTINATION\"\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D9CF3A742FE159CD00ECB6F7 /* Sources */ = {

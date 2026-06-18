@@ -733,5 +733,6 @@ private struct WatermarkOptionButton: View {
             draftID: nil
         )
         .environmentObject(MemoriesAppState())
+        .environmentObject(StoreKitManager())
     }
 }

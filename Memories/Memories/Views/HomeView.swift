@@ -253,4 +253,5 @@ private struct HomeActionRow: View {
 #Preview {
     HomeView()
         .environmentObject(MemoriesAppState())
+        .environmentObject(StoreKitManager())
 }

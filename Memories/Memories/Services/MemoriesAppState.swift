@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import StoreKit
 
 #if DEBUG
 enum DebugEntitlementOverride: String, CaseIterable, Identifiable {
@@ -78,32 +77,15 @@ enum DebugDraftLimitOverride: String, CaseIterable, Identifiable {
 #endif
 
 enum PurchaseProductID: String, CaseIterable {
-    case sevenDayPass = "com.myfs716.Memories.7daypass"
-    case lifetimePass = "com.myfs716.Memories.lifetime"
-
-    var storeProductIDs: [String] {
-        switch self {
-        case .sevenDayPass:
-            return [rawValue]
-        case .lifetimePass:
-            // Accept common Lifetime product ID spellings so the upgrade stays
-            // available even if App Store Connect uses a slightly different ID.
-            return [
-                rawValue,
-                "com.myfs716.Memories.lifetimepass",
-                "com.myfs716.Memories.lifetimePass",
-                "com.myfs716.Memories.LifetimePass",
-                "com.myfs716.Memories.lifetime_pass"
-            ]
-        }
-    }
+    case sevenDayPass = "memories.7day.pass"
+    case lifetimePass = "memories.lifetime.pass"
 
     static var allStoreProductIDs: [String] {
-        allCases.flatMap(\.storeProductIDs)
+        allCases.map(\.rawValue)
     }
 
     static func matching(productID: String) -> PurchaseProductID? {
-        allCases.first { $0.storeProductIDs.contains(productID) }
+        allCases.first { $0.rawValue == productID }
     }
 }
 
@@ -171,10 +153,15 @@ final class MemoriesAppState: ObservableObject {
         case .sevenDayActive:
             return EntitlementState(
                 sevenDayPassExpiresAt: Calendar.current.date(byAdding: .day, value: 7, to: Date()),
-                hasLifetimePass: false
+                hasLifetimePass: false,
+                lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
             )
         case .lifetime:
-            return EntitlementState(sevenDayPassExpiresAt: nil, hasLifetimePass: true)
+            return EntitlementState(
+                sevenDayPassExpiresAt: nil,
+                hasLifetimePass: true,
+                lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
+            )
         }
         #else
         return entitlementState
@@ -208,7 +195,8 @@ final class MemoriesAppState: ObservableObject {
     func grantSevenDayPass(from date: Date = Date()) {
         entitlementState = EntitlementState(
             sevenDayPassExpiresAt: Calendar.current.date(byAdding: .day, value: 7, to: date),
-            hasLifetimePass: entitlementState.hasLifetimePass
+            hasLifetimePass: entitlementState.hasLifetimePass,
+            lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
         )
         entitlementRefreshID = UUID()
     }
@@ -216,29 +204,54 @@ final class MemoriesAppState: ObservableObject {
     func grantLifetimePass() {
         entitlementState = EntitlementState(
             sevenDayPassExpiresAt: entitlementState.sevenDayPassExpiresAt,
-            hasLifetimePass: true
+            hasLifetimePass: true,
+            lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
         )
         entitlementRefreshID = UUID()
     }
 
-    func applyPurchasedProduct(id: String) {
+    @discardableResult
+    func applyPurchasedProduct(id: String, purchaseDate: Date = Date()) -> Bool {
         switch PurchaseProductID.matching(productID: id) {
         case .sevenDayPass:
-            grantSevenDayPass()
+            grantSevenDayPass(from: purchaseDate)
+            return true
         case .lifetimePass:
             grantLifetimePass()
+            return true
+        case nil:
+            return false
+        }
+    }
+
+    func revokePurchasedProduct(id: String) {
+        switch PurchaseProductID.matching(productID: id) {
+        case .sevenDayPass:
+            entitlementState = EntitlementState(
+                sevenDayPassExpiresAt: nil,
+                hasLifetimePass: entitlementState.hasLifetimePass,
+                lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
+            )
+            entitlementRefreshID = UUID()
+        case .lifetimePass:
+            entitlementState = EntitlementState(
+                sevenDayPassExpiresAt: entitlementState.sevenDayPassExpiresAt,
+                hasLifetimePass: false,
+                lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
+            )
+            entitlementRefreshID = UUID()
         case nil:
             break
         }
     }
 
-    func applyCurrentEntitlements() async {
-        for await result in Transaction.currentEntitlements {
-            guard case .verified(let transaction) = result else {
-                continue
-            }
-            applyPurchasedProduct(id: transaction.productID)
-        }
+    func markTransactionCheck(at date: Date = Date()) {
+        entitlementState = EntitlementState(
+            sevenDayPassExpiresAt: entitlementState.sevenDayPassExpiresAt,
+            hasLifetimePass: entitlementState.hasLifetimePass,
+            lastTransactionCheckAt: date
+        )
+        entitlementRefreshID = UUID()
     }
 
     func resetDailyWatermarkFreeUseForDebug() {

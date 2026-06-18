@@ -16,4 +16,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environmentObject(MemoriesAppState())
+        .environmentObject(StoreKitManager())
 }

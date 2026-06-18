@@ -21,10 +21,12 @@ enum WatermarkExportOption: String, CaseIterable, Identifiable, Hashable {
 struct EntitlementState: Codable, Hashable {
     var sevenDayPassExpiresAt: Date?
     var hasLifetimePass: Bool
+    var lastTransactionCheckAt: Date?
 
     static let free = EntitlementState(
         sevenDayPassExpiresAt: nil,
-        hasLifetimePass: false
+        hasLifetimePass: false,
+        lastTransactionCheckAt: nil
     )
 
     func grantsUnlimitedWatermarkFreeOutput(on date: Date = Date()) -> Bool {
@@ -37,6 +39,14 @@ struct EntitlementState: Codable, Hashable {
         }
 
         return false
+    }
+
+    func isSevenDayPassActive(on date: Date = Date()) -> Bool {
+        guard let sevenDayPassExpiresAt else {
+            return false
+        }
+
+        return sevenDayPassExpiresAt > date
     }
 }
 

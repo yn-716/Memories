@@ -268,5 +268,6 @@ private struct MissingDraftImageView: View {
     NavigationStack {
         DraftsView()
             .environmentObject(MemoriesAppState())
+            .environmentObject(StoreKitManager())
     }
 }

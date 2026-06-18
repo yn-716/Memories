@@ -1,14 +1,10 @@
-import StoreKit
 import SwiftUI
 
 struct PurchaseView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
 
-    @State private var products: [String: Product] = [:]
-    @State private var isLoading = false
-    @State private var isProcessing = false
-    @State private var productsLoadFailed = false
     @State private var alert: PurchaseAlert?
 
     var body: some View {
@@ -20,7 +16,7 @@ struct PurchaseView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         currentStatusCard
 
-                        if productsLoadFailed {
+                        if storeKitManager.productsLoadFailed {
                             productLoadErrorCard
                         }
 
@@ -41,7 +37,7 @@ struct PurchaseView: View {
                     .frame(maxWidth: .infinity)
                 }
 
-                if isLoading || isProcessing {
+                if storeKitManager.isLoadingProducts || isProcessing {
                     ProgressView(appState.t("preview.processing"))
                         .font(.subheadline.weight(.semibold))
                         .tint(MemoriesTheme.accentDeep)
@@ -60,7 +56,8 @@ struct PurchaseView: View {
                 }
             }
             .task {
-                await loadProducts()
+                storeKitManager.configure(appState: appState)
+                await storeKitManager.loadProducts()
             }
             .alert(item: $alert) { alert in
                 Alert(
@@ -132,9 +129,9 @@ struct PurchaseView: View {
     }
 
     private func productCard(for productID: PurchaseProductID) -> some View {
-        let product = products[productID.rawValue]
         let state = productState(for: productID)
         let canPurchase = canStartPurchase(productID, state: state)
+        let displayPrice = storeKitManager.productDisplayPrice(for: productID)
 
         return MemoriesGlassPanel {
             VStack(alignment: .leading, spacing: 14) {
@@ -173,9 +170,9 @@ struct PurchaseView: View {
 
                 HStack {
                     if state.showsPrice {
-                        Text(product?.displayPrice ?? appState.t("purchase.unavailable"))
+                        Text(displayPrice ?? appState.t("purchase.unavailable"))
                             .font(.headline.weight(.semibold))
-                            .foregroundStyle(product == nil ? MemoriesTheme.textSub : MemoriesTheme.accentDeep)
+                            .foregroundStyle(displayPrice == nil ? MemoriesTheme.textSub : MemoriesTheme.accentDeep)
                             .lineLimit(1)
                             .minimumScaleFactor(0.78)
                     }
@@ -333,17 +330,7 @@ struct PurchaseView: View {
             return false
         }
 
-        if products[productID.rawValue] != nil {
-            return true
-        }
-
-        #if DEBUG
-        // Local debug builds often do not have StoreKit products configured.
-        // Keep the plan rule testable: a 7-Day Pass must not block Lifetime.
-        return !isLoading
-        #else
-        return false
-        #endif
+        return storeKitManager.hasStoreProduct(for: productID)
     }
 
     private func remainingText(until expiry: Date) -> String {
@@ -363,82 +350,36 @@ struct PurchaseView: View {
         return String(format: appState.t("purchase.remainingDays"), days)
     }
 
-    private func loadProducts() async {
-        guard products.isEmpty else {
-            return
-        }
-
-        isLoading = true
-        productsLoadFailed = false
-        defer { isLoading = false }
-
-        do {
-            let storeProducts = try await Product.products(for: PurchaseProductID.allStoreProductIDs)
-            var mappedProducts: [String: Product] = [:]
-            for product in storeProducts {
-                guard let productID = PurchaseProductID.matching(productID: product.id) else {
-                    continue
-                }
-
-                mappedProducts[productID.rawValue] = mappedProducts[productID.rawValue] ?? product
-            }
-
-            products = mappedProducts
-            productsLoadFailed = products.count < PurchaseProductID.allCases.count
-        } catch {
-            productsLoadFailed = true
-            alert = PurchaseAlert(title: appState.t("purchase.productsFailed"), message: error.localizedDescription)
-        }
-    }
-
     private func purchase(_ productID: PurchaseProductID) async {
-        guard let product = products[productID.rawValue] else {
-            #if DEBUG
-            appState.applyPurchasedProduct(id: productID.rawValue)
+        let result = await storeKitManager.purchase(productID)
+        switch result {
+        case .completed:
             alert = PurchaseAlert(title: appState.t("purchase.completed"), message: nil)
-            return
-            #else
+        case .cancelled:
+            break
+        case .pending:
+            alert = PurchaseAlert(title: appState.t("purchase.pending"), message: nil)
+        case .productsUnavailable:
             alert = PurchaseAlert(title: appState.t("purchase.productsFailed"), message: nil)
-            return
-            #endif
-        }
-
-        isProcessing = true
-        defer { isProcessing = false }
-
-        do {
-            let result = try await product.purchase()
-            switch result {
-            case .success(let verification):
-                guard case .verified(let transaction) = verification else {
-                    alert = PurchaseAlert(title: appState.t("purchase.failed"), message: nil)
-                    return
-                }
-
-                appState.applyPurchasedProduct(id: transaction.productID)
-                await transaction.finish()
-                alert = PurchaseAlert(title: appState.t("purchase.completed"), message: nil)
-            case .userCancelled, .pending:
-                break
-            @unknown default:
-                break
-            }
-        } catch {
+        case .failed(let error):
             alert = PurchaseAlert(title: appState.t("purchase.failed"), message: error.localizedDescription)
         }
     }
 
     private func restorePurchases() async {
-        isProcessing = true
-        defer { isProcessing = false }
-
-        do {
-            try await AppStore.sync()
-            await appState.applyCurrentEntitlements()
+        let result = await storeKitManager.restorePurchases()
+        switch result {
+        case .restored:
             alert = PurchaseAlert(title: appState.t("purchase.restored"), message: nil)
-        } catch {
+        case .noPurchases:
+            alert = PurchaseAlert(title: appState.t("purchase.noRestoredPurchases"), message: nil)
+        case .failed(let error):
             alert = PurchaseAlert(title: appState.t("purchase.restoreFailed"), message: error.localizedDescription)
         }
+    }
+
+    private var isProcessing: Bool {
+        storeKitManager.isProcessingPurchase || storeKitManager.isRestoringPurchases
     }
 }
 
@@ -464,4 +405,5 @@ private struct PurchaseAlert: Identifiable {
 #Preview {
     PurchaseView()
         .environmentObject(MemoriesAppState())
+        .environmentObject(StoreKitManager())
 }

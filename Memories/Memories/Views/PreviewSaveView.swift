@@ -110,7 +110,7 @@ struct PreviewSaveView: View {
                 deleteCurrentDraft()
             }
 
-            Button(appState.t("preview.decideLater"), role: .cancel) {}
+            Button(appState.t("preview.returnToPreview"), role: .cancel) {}
         } message: {
             Text(appState.t("preview.keepExistingDraftQuestion"))
         }
@@ -126,7 +126,7 @@ struct PreviewSaveView: View {
                 onFinishWithoutDraft()
             }
 
-            Button(appState.t("preview.decideLater"), role: .cancel) {}
+            Button(appState.t("preview.returnToPreview"), role: .cancel) {}
         } message: {
             Text(appState.t("preview.saveNewDraftQuestion"))
         }

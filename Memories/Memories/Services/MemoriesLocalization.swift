@@ -58,7 +58,7 @@ enum MemoriesLocalization {
     }
 
     private static let ja: [String: String] = [
-        "app.name": "Memories",
+        "app.name": "Memories Pet Life",
         "common.ok": "OK",
         "common.close": "閉じる",
         "common.cancel": "キャンセル",
@@ -102,7 +102,7 @@ enum MemoriesLocalization {
         "editor.subText": "サブテキスト",
         "editor.display": "表示",
         "editor.empty": "未入力",
-        "editor.characterGuide": "%d / %d 文字目安",
+        "editor.characterGuide": "%d / %d 文字まで",
         "editor.mainHint": "名前や、写真のタイトル",
         "editor.subHint": "写真の詳細",
         "editor.locationHint": "写真の場所やシーン",
@@ -231,7 +231,7 @@ enum MemoriesLocalization {
     ]
 
     private static let en: [String: String] = [
-        "app.name": "Memories",
+        "app.name": "Memories Pet Life",
         "common.ok": "OK",
         "common.close": "Close",
         "common.cancel": "Cancel",
@@ -275,7 +275,7 @@ enum MemoriesLocalization {
         "editor.subText": "Sub Text",
         "editor.display": "Show",
         "editor.empty": "Empty",
-        "editor.characterGuide": "%d / %d chars",
+        "editor.characterGuide": "%d / %d chars max",
         "editor.mainHint": "Name or photo title",
         "editor.subHint": "Photo details",
         "editor.locationHint": "Place or scene",

@@ -16,6 +16,8 @@ struct WatermarkPolicy: Hashable {
 }
 
 struct WatermarkRenderer {
+    private static let brandName = "Memories Pet Life"
+
     func draw(mode: WatermarkMode, overlayPosition: OverlayPosition, in context: CGContext, size: CGSize) {
         draw(policy: WatermarkPolicy(mode: mode), overlayPosition: overlayPosition, in: context, size: size)
     }
@@ -34,7 +36,7 @@ struct WatermarkRenderer {
         let iconSide = pillHeight * 0.62
         let fontSize = pillHeight * 0.36
         let font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
-        let text = "Memories"
+        let text = Self.brandName
         let textAttributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: UIColor.white.withAlphaComponent(0.78)
@@ -43,7 +45,7 @@ struct WatermarkRenderer {
         let horizontalPadding = pillHeight * 0.28
         let spacing = pillHeight * 0.18
         let rawWidth = horizontalPadding * 2 + iconSide + spacing + textSize.width
-        let pillWidth = min(max(rawWidth, base * 0.18), base * 0.28)
+        let pillWidth = min(max(rawWidth, base * 0.28), base * 0.46)
         let inset = max(18, base * 0.056)
         let origin = origin(
             for: watermarkPosition,
@@ -109,6 +111,6 @@ struct WatermarkRenderer {
             .font: UIFont.systemFont(ofSize: fontSize, weight: .semibold),
             .foregroundColor: UIColor.white.withAlphaComponent(0.42)
         ]
-        NSString(string: "Memories").draw(with: rect, options: [.usesLineFragmentOrigin], attributes: attributes, context: nil)
+        NSString(string: Self.brandName).draw(with: rect, options: [.usesLineFragmentOrigin], attributes: attributes, context: nil)
     }
 }

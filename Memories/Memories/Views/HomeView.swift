@@ -91,7 +91,11 @@ struct HomeView: View {
                 DraftsView()
             }
             .navigationDestination(item: $editorRoute) { route in
-                EditorView(template: route.template, photoImage: route.photoImage)
+                EditorView(
+                    template: route.template,
+                    photoImage: route.photoImage,
+                    initialEditState: route.initialEditState
+                )
             }
             .task(id: selectedPhotoItem) {
                 await loadSelectedPhoto()
@@ -125,9 +129,12 @@ struct HomeView: View {
                     .background(MemoriesTheme.subBackground.opacity(0.86))
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text("Memories")
+                Text(appState.t("app.name"))
                     .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Text(appState.t("home.tagline"))
@@ -168,10 +175,32 @@ struct HomeView: View {
                 return
             }
 
-            editorRoute = EditorRoute(template: template, photoImage: image)
+            let metadata = await PhotoMetadataReader().metadata(from: data)
+            let initialEditState = initialEditState(from: metadata)
+            editorRoute = EditorRoute(
+                template: template,
+                photoImage: image,
+                initialEditState: initialEditState
+            )
         } catch {
             photoErrorMessage = appState.t("home.photoLoadError")
         }
+    }
+
+    private func initialEditState(from metadata: PhotoMetadata) -> CardEditState {
+        var state = CardEditState.newCard(
+            defaultLayout: template.defaultLayout,
+            fontRole: template.overlayStyle.defaultFontRole,
+            textColor: template.overlayStyle.defaultTextColor,
+            date: metadata.capturedAt ?? Date()
+        )
+
+        if let locationText = metadata.locationText?.trimmingCharacters(in: .whitespacesAndNewlines), !locationText.isEmpty {
+            state.locationText = String(locationText.prefix(30))
+            state.visibilitySettings.showLocation = true
+        }
+
+        return state
     }
 }
 
@@ -207,6 +236,7 @@ private struct EditorRoute: Identifiable, Hashable {
     let id = UUID()
     let template: Template
     let photoImage: UIImage
+    let initialEditState: CardEditState
 
     static func == (lhs: EditorRoute, rhs: EditorRoute) -> Bool {
         lhs.id == rhs.id

@@ -21,6 +21,8 @@ struct EditorView: View {
     @State private var previewRoute: PreviewRoute?
     @State private var showDraftLimitAlert = false
     @State private var showDraftsFromLimit = false
+    @State private var keyboardHeight: CGFloat = 0
+    @FocusState private var focusedTextTarget: TextEditTarget?
 
     init(
         template: Template,
@@ -28,7 +30,7 @@ struct EditorView: View {
         initialEditState: CardEditState? = nil,
         draftID: UUID? = nil
     ) {
-        let initialState = if let initialEditState {
+        let rawInitialState = if let initialEditState {
             initialEditState
         } else if photoImage == nil {
             template.previewEditState
@@ -39,6 +41,7 @@ struct EditorView: View {
                 textColor: template.overlayStyle.defaultTextColor
             )
         }
+        let initialState = limitedEditState(rawInitialState)
 
         self.template = template
         self.photoImage = photoImage
@@ -49,22 +52,33 @@ struct EditorView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let panelHeight = editorPanelHeight(for: geometry.size)
+            let keyboardOffset = max(0, keyboardHeight - geometry.safeAreaInsets.bottom)
+            let hasKeyboard = keyboardOffset > 0
+            let panelHeight = editorPanelHeight(for: geometry.size, keyboardOffset: keyboardOffset)
+            let previewHeight = previewAreaHeight(
+                for: geometry.size,
+                panelHeight: panelHeight,
+                keyboardOffset: keyboardOffset
+            )
+            let restingPanelHeight = editorPanelHeight(for: geometry.size, keyboardOffset: 0)
+            let restingPreviewHeight = max(geometry.size.height - restingPanelHeight, 280)
 
             VStack(spacing: 0) {
-                previewArea
-                    .frame(height: max(geometry.size.height - panelHeight, 280))
+                previewArea(referenceAreaHeight: hasKeyboard ? restingPreviewHeight : previewHeight)
+                    .frame(height: previewHeight)
 
                 editorPanel
                     .frame(height: panelHeight)
                     .padding(.horizontal, 14)
-                    .padding(.bottom, 10)
+                    .padding(.bottom, 10 + keyboardOffset)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .frame(maxWidth: MemoriesLayoutMetrics.editorMaxWidth)
             .frame(maxWidth: .infinity)
+            .animation(.easeOut(duration: 0.22), value: keyboardOffset)
         }
         .background(MemoriesTheme.background.ignoresSafeArea())
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .navigationTitle(appState.t("editor.title"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
@@ -114,6 +128,7 @@ struct EditorView: View {
                     .disabled(isPreparingOutput)
 
                     Button {
+                        editState = limitedEditState(editState)
                         previewRoute = PreviewRoute(
                             template: template,
                             editState: editState,
@@ -236,15 +251,27 @@ struct EditorView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
+            updateKeyboardHeight(from: notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { notification in
+            updateKeyboardHeight(from: notification)
+        }
         .scrollDismissesKeyboard(.interactively)
     }
 
-    private var previewArea: some View {
+    private func previewArea(referenceAreaHeight: CGFloat) -> some View {
         GeometryReader { proxy in
-            let maxWidth = max(120, proxy.size.width - 48)
-            let maxHeight = max(160, proxy.size.height - 38)
+            let horizontalInset: CGFloat = 48
+            let verticalInset: CGFloat = 38
+            let maxWidth = max(120, proxy.size.width - horizontalInset)
+            let maxHeight = max(160, proxy.size.height - verticalInset)
             let previewWidth = min(maxWidth, maxHeight * photoAspectRatio)
             let previewHeight = previewWidth / photoAspectRatio
+            let referenceMaxHeight = max(maxHeight, referenceAreaHeight - verticalInset)
+            let referenceWidth = min(maxWidth, referenceMaxHeight * photoAspectRatio)
+            let referenceHeight = referenceWidth / photoAspectRatio
+            let previewScale = min(1, previewWidth / max(referenceWidth, 1), previewHeight / max(referenceHeight, 1))
 
             ZStack {
                 MemoriesTheme.background
@@ -255,6 +282,8 @@ struct EditorView: View {
                     photoImage: photoImage,
                     aspectRatio: photoAspectRatio
                 )
+                .frame(width: referenceWidth, height: referenceHeight)
+                .scaleEffect(previewScale)
                 .frame(width: previewWidth, height: previewHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay {
@@ -269,14 +298,16 @@ struct EditorView: View {
 
     private var editorPanel: some View {
         MemoriesGlassPanel {
-            VStack(spacing: 10) {
-                tabBar
+            VStack(spacing: isKeyboardVisible ? 7 : 10) {
+                if !isKeyboardVisible {
+                    tabBar
+                }
 
                 tabContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, isKeyboardVisible ? 8 : 10)
         }
     }
 
@@ -309,11 +340,13 @@ struct EditorView: View {
     private var textTab: some View {
         let target = selectedTextTarget
 
-        return VStack(alignment: .leading, spacing: 9) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(appState.t("editor.textItems"))
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(MemoriesTheme.textSub)
+        return VStack(alignment: .leading, spacing: isKeyboardVisible ? 6 : 9) {
+            VStack(alignment: .leading, spacing: isKeyboardVisible ? 5 : 6) {
+                if !isKeyboardVisible {
+                    Text(appState.t("editor.textItems"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textSub)
+                }
 
                 HStack(spacing: 6) {
                     ForEach(TextEditTarget.allCases) { target in
@@ -329,7 +362,7 @@ struct EditorView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: isKeyboardVisible ? 6 : 7) {
                 HStack(spacing: 10) {
                     Label(target.editorTitle(language: appState.resolvedLanguage), systemImage: target.systemImage)
                         .font(.subheadline.weight(.semibold))
@@ -340,10 +373,12 @@ struct EditorView: View {
                     CompactVisibilityToggle(isOn: visibilityBinding(for: target))
                 }
 
-                Text(target.hint(language: appState.resolvedLanguage))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(MemoriesTheme.textSub)
-                    .lineLimit(1)
+                if !isKeyboardVisible {
+                    Text(target.hint(language: appState.resolvedLanguage))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MemoriesTheme.textSub)
+                        .lineLimit(1)
+                }
 
                 if target == .date {
                     dateEditor
@@ -351,7 +386,7 @@ struct EditorView: View {
                     textFieldEditor(for: target)
                 }
             }
-            .padding(12)
+            .padding(isKeyboardVisible ? 10 : 12)
             .background(MemoriesTheme.card.opacity(0.52))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
@@ -362,10 +397,11 @@ struct EditorView: View {
     }
 
     private func textFieldEditor(for target: TextEditTarget) -> some View {
-        let text = textBinding(for: target)
+        let text = limitedTextBinding(for: target)
 
         return VStack(spacing: 7) {
             TextField(target.placeholder(language: appState.resolvedLanguage), text: text)
+                .focused($focusedTextTarget, equals: target)
                 .textInputAutocapitalization(.never)
                 .submitLabel(.done)
                 .font(.subheadline.weight(.medium))
@@ -639,6 +675,24 @@ struct EditorView: View {
         }
     }
 
+    private func limitedTextBinding(for target: TextEditTarget) -> Binding<String> {
+        let text = textBinding(for: target)
+        let limit = target.characterLimit
+
+        guard limit > 0 else {
+            return text
+        }
+
+        return Binding(
+            get: {
+                limited(text.wrappedValue, to: limit)
+            },
+            set: { newValue in
+                text.wrappedValue = limited(newValue, to: limit)
+            }
+        )
+    }
+
     private func visibilityBinding(for target: TextEditTarget) -> Binding<Bool> {
         switch target {
         case .main:
@@ -665,6 +719,7 @@ struct EditorView: View {
             return
         }
 
+        editState = limitedEditState(editState)
         isPreparingOutput = true
         defer { isPreparingOutput = false }
 
@@ -693,8 +748,42 @@ struct EditorView: View {
         Array(repeating: GridItem(.flexible(), spacing: 7), count: count)
     }
 
-    private func editorPanelHeight(for size: CGSize) -> CGFloat {
-        min(max(size.height * 0.36, 252), size.height * 0.4)
+    private var isKeyboardVisible: Bool {
+        keyboardHeight > 1
+    }
+
+    private func editorPanelHeight(for size: CGSize, keyboardOffset: CGFloat) -> CGFloat {
+        guard keyboardOffset > 0 else {
+            return min(max(size.height * 0.36, 252), size.height * 0.4)
+        }
+
+        let visibleHeight = max(size.height - keyboardOffset, 320)
+        return min(max(visibleHeight * 0.42, 204), 248)
+    }
+
+    private func previewAreaHeight(for size: CGSize, panelHeight: CGFloat, keyboardOffset: CGFloat) -> CGFloat {
+        guard keyboardOffset > 0 else {
+            return max(size.height - panelHeight, 280)
+        }
+
+        let availableHeight = size.height - panelHeight - keyboardOffset - 10
+        return max(170, availableHeight)
+    }
+
+    private func updateKeyboardHeight(from notification: Notification) {
+        guard
+            let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else {
+            return
+        }
+
+        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.22
+        let screenHeight = UIScreen.main.bounds.height
+        let nextHeight = max(0, screenHeight - frame.minY)
+
+        withAnimation(.easeOut(duration: duration)) {
+            keyboardHeight = nextHeight
+        }
     }
 
     private func canSaveDraft(existingDraftID: UUID?) -> Bool {
@@ -728,6 +817,26 @@ private struct PreviewRoute: Identifiable, Hashable {
     }
 }
 
+private func limited(_ value: String, to characterLimit: Int) -> String {
+    String(value.prefix(max(0, characterLimit)))
+}
+
+private func limitedEditState(_ editState: CardEditState) -> CardEditState {
+    var limitedState = editState
+    limitedState.mainText = limited(limitedState.mainText, to: CardTextLimits.main)
+    limitedState.subText = limited(limitedState.subText, to: CardTextLimits.sub)
+    limitedState.locationText = limited(limitedState.locationText, to: CardTextLimits.location)
+    limitedState.customDateText = limited(limitedState.customDateText, to: CardTextLimits.customDate)
+    return limitedState
+}
+
+private enum CardTextLimits {
+    static let main = 30
+    static let sub = 40
+    static let location = 30
+    static let customDate = 30
+}
+
 private struct DateEditPayload {
     let dateMode: CardDateMode
     let selectedDate: Date
@@ -753,7 +862,7 @@ private struct DateEditSheet: View {
         _tempSelectedDate = State(initialValue: editState.selectedDate)
         _tempStartDate = State(initialValue: editState.startDate)
         _tempEndDate = State(initialValue: max(editState.startDate, editState.endDate))
-        _tempCustomDateText = State(initialValue: editState.customDateText)
+        _tempCustomDateText = State(initialValue: limited(editState.customDateText, to: CardTextLimits.customDate))
     }
 
     var body: some View {
@@ -917,7 +1026,7 @@ private struct DateEditSheet: View {
 
         case .custom:
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Spring 2026 / First Cafe Day / Today", text: $tempCustomDateText)
+                TextField("Spring 2026 / First Cafe Day / Today", text: limitedCustomDateText)
                     .textInputAutocapitalization(.words)
                     .submitLabel(.done)
                     .font(.subheadline.weight(.medium))
@@ -935,12 +1044,21 @@ private struct DateEditSheet: View {
                 HStack {
                     Spacer()
 
-                    Text(String(format: appState.t("editor.characterGuide"), tempCustomDateText.count, 30))
+                    Text(String(format: appState.t("editor.characterGuide"), tempCustomDateText.count, CardTextLimits.customDate))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(MemoriesTheme.textSub)
                 }
             }
         }
+    }
+
+    private var limitedCustomDateText: Binding<String> {
+        Binding(
+            get: { limited(tempCustomDateText, to: CardTextLimits.customDate) },
+            set: { newValue in
+                tempCustomDateText = limited(newValue, to: CardTextLimits.customDate)
+            }
+        )
     }
 
     private func datePickerRow(title: String, selection: Binding<Date>) -> some View {
@@ -994,7 +1112,7 @@ private struct DateEditSheet: View {
         case .range:
             return "\(CardEditState.formatted(tempStartDate)) - \(CardEditState.formatted(max(tempStartDate, tempEndDate)))"
         case .custom:
-            return tempCustomDateText
+            return limited(tempCustomDateText, to: CardTextLimits.customDate)
         }
     }
 
@@ -1012,7 +1130,7 @@ private struct DateEditSheet: View {
                 selectedDate: CardEditState.normalizedDate(tempSelectedDate),
                 startDate: tempStartDate,
                 endDate: max(tempStartDate, tempEndDate),
-                customDateText: tempCustomDateText
+                customDateText: limited(tempCustomDateText, to: CardTextLimits.customDate)
             )
         )
         dismiss()
@@ -1041,7 +1159,7 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
     }
 }
 
-private enum TextEditTarget: CaseIterable, Identifiable {
+private enum TextEditTarget: CaseIterable, Identifiable, Hashable {
     case main
     case sub
     case location
@@ -1104,11 +1222,11 @@ private enum TextEditTarget: CaseIterable, Identifiable {
     var characterLimit: Int {
         switch self {
         case .main:
-            return 30
+            return CardTextLimits.main
         case .sub:
-            return 40
+            return CardTextLimits.sub
         case .location:
-            return 30
+            return CardTextLimits.location
         case .date:
             return 0
         }

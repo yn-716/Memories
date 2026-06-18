@@ -108,10 +108,10 @@ struct PhotoMetadataReader {
                 }
             }
         } catch {
-            // Reverse geocoding can fail offline; the coordinate fallback still gives a useful initial value.
+            // Reverse geocoding can fail offline; avoid exposing raw GPS coordinates as card text.
         }
 
-        return formattedCoordinateText(coordinate)
+        return nil
     }
 
     private func formattedLocationText(from placemark: CLPlacemark) -> String {
@@ -132,9 +132,6 @@ struct PhotoMetadataReader {
         return uniqueParts.prefix(2).joined(separator: " ")
     }
 
-    private func formattedCoordinateText(_ coordinate: CLLocationCoordinate2D) -> String {
-        String(format: "%.4f, %.4f", coordinate.latitude, coordinate.longitude)
-    }
 }
 
 private struct RawPhotoMetadata {

@@ -357,6 +357,9 @@ struct EditorView: View {
                             withAnimation(.easeInOut(duration: 0.16)) {
                                 selectedTextTarget = target
                             }
+                            if focusedTextTarget != nil {
+                                focusedTextTarget = target == .date ? nil : target
+                            }
                         }
                     }
                 }
@@ -401,6 +404,7 @@ struct EditorView: View {
 
         return VStack(spacing: 7) {
             TextField(target.placeholder(language: appState.resolvedLanguage), text: text)
+                .id(target)
                 .focused($focusedTextTarget, equals: target)
                 .textInputAutocapitalization(.never)
                 .submitLabel(.done)
@@ -562,7 +566,7 @@ struct EditorView: View {
                 LazyVGrid(columns: iconColumns(count: 5), spacing: 8) {
                     ForEach(FontRole.allCases) { fontRole in
                         CompactTextOptionButton(
-                            title: fontRole.displayName,
+                            title: fontRole.displayName(language: appState.resolvedLanguage),
                             sample: "Aa",
                             isSelected: editState.selectedFontRole == fontRole
                         ) {

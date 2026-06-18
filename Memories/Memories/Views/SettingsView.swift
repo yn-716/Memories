@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var showDebugResetAlert = false
     #endif
     @State private var showPurchase = false
+    @State private var safariDestination: SettingsSupportDestination?
     @State private var settingsAlert: SettingsAlert?
     @State private var isRestoring = false
 
@@ -19,6 +20,7 @@ struct SettingsView: View {
                 planSection
                 languageSection
                 privacySection
+                supportPoliciesSection
                 versionSection
 
                 #if DEBUG
@@ -32,6 +34,10 @@ struct SettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showPurchase) {
             PurchaseView()
+        }
+        .sheet(item: $safariDestination) { destination in
+            SafariView(url: destination.url)
+                .ignoresSafeArea()
         }
         .alert(item: $settingsAlert) { alert in
             Alert(
@@ -119,6 +125,27 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             .tint(MemoriesTheme.accentDeep)
+        }
+    }
+
+    private var supportPoliciesSection: some View {
+        Section(appState.t("settings.supportPolicies")) {
+            ForEach(SettingsSupportDestination.allCases) { destination in
+                Button {
+                    safariDestination = destination
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(appState.t(destination.titleKey))
+                            .foregroundStyle(MemoriesTheme.textMain)
+                        Spacer(minLength: 12)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(MemoriesTheme.textSub)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -247,6 +274,36 @@ private struct SettingsAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String?
+}
+
+private enum SettingsSupportDestination: String, CaseIterable, Identifiable {
+    case support
+    case privacy
+    case legal
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .support:
+            return "settings.supportPage"
+        case .privacy:
+            return "settings.privacyPolicy"
+        case .legal:
+            return "settings.legalDisclosure"
+        }
+    }
+
+    var url: URL {
+        switch self {
+        case .support:
+            return URL(string: "https://memories.myfs716.com/support/")!
+        case .privacy:
+            return URL(string: "https://memories.myfs716.com/privacy/")!
+        case .legal:
+            return URL(string: "https://memories.myfs716.com/legal/tokusho/")!
+        }
+    }
 }
 
 #Preview {

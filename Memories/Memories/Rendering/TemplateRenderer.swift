@@ -365,7 +365,7 @@ final class TemplateRenderer {
         var height: CGFloat = 0
 
         if editState.visibilitySettings.showThemeIcon || shouldDrawWeather(editState) {
-            height += base * (CardOverlayLayout.iconRowAdvanceRatio + 0.008)
+            height += base * (CardOverlayLayout.iconRowAdvanceRatio + 0.006)
         }
         if shouldDrawText(editState.locationText, isVisible: editState.visibilitySettings.showLocation) {
             height += CardOverlayLayout.lineHeight(for: .meta, canvasSize: size)

@@ -543,6 +543,22 @@ enum FontRole: String, Codable, CaseIterable, Hashable, Identifiable {
 
     var id: String { rawValue }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let rawValue = try container.decode(String.self)
+        if rawValue == "rounded" {
+            self = .soft
+            return
+        }
+
+        self = FontRole(rawValue: rawValue) ?? .clean
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
     var displayName: String {
         switch self {
         case .clean:
@@ -556,6 +572,10 @@ enum FontRole: String, Codable, CaseIterable, Hashable, Identifiable {
         case .journal:
             return "Journal"
         }
+    }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        displayName
     }
 
     func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
@@ -583,10 +603,7 @@ enum FontRole: String, Codable, CaseIterable, Hashable, Identifiable {
                 .withDesign(.serif)
                 .map { UIFont(descriptor: $0, size: size) } ?? .systemFont(ofSize: size, weight: weight)
         case .soft:
-            return UIFontDescriptor
-                .preferredFontDescriptor(withTextStyle: .body)
-                .withDesign(.rounded)
-                .map { UIFont(descriptor: $0, size: size) } ?? .systemFont(ofSize: size, weight: weight)
+            return roundedUIFont(size: size, weight: weight)
         case .modern:
             return .systemFont(ofSize: size, weight: weight == .regular ? .medium : weight)
         case .journal:
@@ -596,6 +613,14 @@ enum FontRole: String, Codable, CaseIterable, Hashable, Identifiable {
                 .withSymbolicTraits(.traitItalic)
             return descriptor.map { UIFont(descriptor: $0, size: size) } ?? .italicSystemFont(ofSize: size)
         }
+    }
+
+    private func roundedUIFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let baseFont = UIFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = baseFont.fontDescriptor.withDesign(.rounded) {
+            return UIFont(descriptor: descriptor, size: size)
+        }
+        return baseFont
     }
 }
 

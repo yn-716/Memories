@@ -10,16 +10,16 @@ enum CardOverlayTextRole {
 struct CardOverlayLayout {
     static let insetRatio: CGFloat = 0.055
     static let blockWidthRatio: CGFloat = 0.84
-    static let themeIconSizeRatio: CGFloat = 0.145
-    static let weatherIconSizeRatio: CGFloat = 0.128
-    static let metaIconSizeRatio: CGFloat = 0.074
+    static let themeIconSizeRatio: CGFloat = 0.116
+    static let weatherIconSizeRatio: CGFloat = 0.102
+    static let metaIconSizeRatio: CGFloat = 0.059
     static let iconSpacingRatio: CGFloat = 0.08
-    static let iconTextSpacingRatio: CGFloat = 0.22
-    static let iconRowAdvanceRatio: CGFloat = 0.160
-    static let metaLineHeightRatio: CGFloat = 0.080
-    static let mainTopSpacingRatio: CGFloat = 0.012
-    static let mainLineHeightRatio: CGFloat = 0.091
-    static let subLineHeightRatio: CGFloat = 0.058
+    static let iconTextSpacingRatio: CGFloat = 0.20
+    static let iconRowAdvanceRatio: CGFloat = 0.128
+    static let metaLineHeightRatio: CGFloat = 0.064
+    static let mainTopSpacingRatio: CGFloat = 0.010
+    static let mainLineHeightRatio: CGFloat = 0.073
+    static let subLineHeightRatio: CGFloat = 0.046
     static let previewStackSpacingRatio: CGFloat = 0.006
 
     static func base(for size: CGSize) -> CGFloat {
@@ -76,22 +76,22 @@ struct CardOverlayLayout {
 
         switch role {
         case .meta:
-            return base * 0.038
+            return base * 0.030
         case .main:
-            return base * 0.081
+            return base * 0.065
         case .sub:
-            return base * 0.041
+            return base * 0.033
         }
     }
 
     static func fontWeight(for role: CardOverlayTextRole) -> UIFont.Weight {
         switch role {
         case .meta:
-            return .medium
-        case .main:
             return .semibold
+        case .main:
+            return .bold
         case .sub:
-            return .regular
+            return .medium
         }
     }
 }

@@ -61,8 +61,8 @@ struct TemplateCanvasPreview: View {
                             fallbackSystemName: editState.selectedThemeIcon.symbolName
                         )
                         .frame(
-                            width: max(16, CardOverlayLayout.themeIconSize(for: size)),
-                            height: max(16, CardOverlayLayout.themeIconSize(for: size))
+                            width: CardOverlayLayout.themeIconSize(for: size),
+                            height: CardOverlayLayout.themeIconSize(for: size)
                         )
                     }
 
@@ -72,8 +72,8 @@ struct TemplateCanvasPreview: View {
                             fallbackSystemName: symbolName
                         )
                         .frame(
-                            width: max(15, CardOverlayLayout.weatherIconSize(for: size)),
-                            height: max(15, CardOverlayLayout.weatherIconSize(for: size))
+                            width: CardOverlayLayout.weatherIconSize(for: size),
+                            height: CardOverlayLayout.weatherIconSize(for: size)
                         )
                     }
                 }
@@ -123,8 +123,8 @@ struct TemplateCanvasPreview: View {
 
             MemoriesTemplateIcon(assetName: icon.assetName, fallbackSystemName: icon.fallbackSymbolName)
                 .frame(
-                    width: max(9, CardOverlayLayout.metaIconSize(for: size)),
-                    height: max(9, CardOverlayLayout.metaIconSize(for: size))
+                    width: CardOverlayLayout.metaIconSize(for: size),
+                    height: CardOverlayLayout.metaIconSize(for: size)
                 )
 
             overlayText(text, size: size, role: .meta)
@@ -154,11 +154,11 @@ struct TemplateCanvasPreview: View {
     private func font(for role: PreviewTextRole, size: CGSize) -> Font {
         switch role {
         case .meta:
-            return editState.selectedFontRole.font(size: max(9, CardOverlayLayout.fontSize(for: .meta, canvasSize: size)), weight: .medium)
+            return editState.selectedFontRole.font(size: CardOverlayLayout.fontSize(for: .meta, canvasSize: size), weight: .semibold)
         case .main:
-            return editState.selectedFontRole.font(size: max(18, CardOverlayLayout.fontSize(for: .main, canvasSize: size)), weight: .semibold)
+            return editState.selectedFontRole.font(size: CardOverlayLayout.fontSize(for: .main, canvasSize: size), weight: .bold)
         case .sub:
-            return editState.selectedFontRole.font(size: max(10, CardOverlayLayout.fontSize(for: .sub, canvasSize: size)), weight: .regular)
+            return editState.selectedFontRole.font(size: CardOverlayLayout.fontSize(for: .sub, canvasSize: size), weight: .medium)
         }
     }
 }

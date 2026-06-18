@@ -8,9 +8,9 @@ struct PhotoMetadata: Hashable {
 }
 
 struct PhotoMetadataReader {
-    func metadata(from data: Data) async -> PhotoMetadata {
-        let rawMetadata = readRawMetadata(from: data)
-        let locationText = await locationText(for: rawMetadata.coordinate)
+    func metadata(from data: Data, allowsLocationSuggestion: Bool = true) async -> PhotoMetadata {
+        let rawMetadata = readRawMetadata(from: data, allowsLocationSuggestion: allowsLocationSuggestion)
+        let locationText = allowsLocationSuggestion ? await locationText(for: rawMetadata.coordinate) : nil
 
         return PhotoMetadata(
             capturedAt: rawMetadata.capturedAt,
@@ -18,7 +18,7 @@ struct PhotoMetadataReader {
         )
     }
 
-    private func readRawMetadata(from data: Data) -> RawPhotoMetadata {
+    private func readRawMetadata(from data: Data, allowsLocationSuggestion: Bool) -> RawPhotoMetadata {
         guard
             let source = CGImageSourceCreateWithData(data as CFData, nil),
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any]
@@ -28,7 +28,7 @@ struct PhotoMetadataReader {
 
         return RawPhotoMetadata(
             capturedAt: capturedAt(from: properties),
-            coordinate: coordinate(from: properties)
+            coordinate: allowsLocationSuggestion ? coordinate(from: properties) : nil
         )
     }
 

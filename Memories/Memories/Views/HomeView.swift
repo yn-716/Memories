@@ -175,7 +175,10 @@ struct HomeView: View {
                 return
             }
 
-            let metadata = await PhotoMetadataReader().metadata(from: data)
+            let metadata = await PhotoMetadataReader().metadata(
+                from: data,
+                allowsLocationSuggestion: appState.suggestPlaceFromPhotoLocation
+            )
             let initialEditState = initialEditState(from: metadata)
             editorRoute = EditorRoute(
                 template: template,

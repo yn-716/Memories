@@ -105,6 +105,12 @@ final class MemoriesAppState: ObservableObject {
 
     @Published var entitlementRefreshID = UUID()
 
+    @Published var suggestPlaceFromPhotoLocation: Bool {
+        didSet {
+            defaults.set(suggestPlaceFromPhotoLocation, forKey: Keys.suggestPlaceFromPhotoLocation)
+        }
+    }
+
     #if DEBUG
     @Published var debugEntitlementOverride: DebugEntitlementOverride {
         didSet {
@@ -126,6 +132,11 @@ final class MemoriesAppState: ObservableObject {
         self.defaults = defaults
         self.appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
         self.entitlementState = Self.loadEntitlementState(from: defaults)
+        if defaults.object(forKey: Keys.suggestPlaceFromPhotoLocation) == nil {
+            self.suggestPlaceFromPhotoLocation = true
+        } else {
+            self.suggestPlaceFromPhotoLocation = defaults.bool(forKey: Keys.suggestPlaceFromPhotoLocation)
+        }
 
         #if DEBUG
         self.debugEntitlementOverride = DebugEntitlementOverride(
@@ -254,6 +265,19 @@ final class MemoriesAppState: ObservableObject {
         entitlementRefreshID = UUID()
     }
 
+    func replaceEntitlementState(
+        sevenDayPassExpiresAt: Date?,
+        hasLifetimePass: Bool,
+        checkedAt: Date = Date()
+    ) {
+        entitlementState = EntitlementState(
+            sevenDayPassExpiresAt: sevenDayPassExpiresAt,
+            hasLifetimePass: hasLifetimePass,
+            lastTransactionCheckAt: checkedAt
+        )
+        entitlementRefreshID = UUID()
+    }
+
     func resetDailyWatermarkFreeUseForDebug() {
         #if DEBUG
         DailyWatermarkFreeExportStore.shared.resetTodayUsage()
@@ -288,6 +312,7 @@ final class MemoriesAppState: ObservableObject {
     private enum Keys {
         static let appLanguage = "memories.appLanguage"
         static let entitlementState = "memories.entitlementState"
+        static let suggestPlaceFromPhotoLocation = "memories.suggestPlaceFromPhotoLocation"
         static let debugEntitlementOverride = "memories.debugEntitlementOverride"
         static let debugDraftLimitOverride = "memories.debugDraftLimitOverride"
     }

@@ -167,14 +167,38 @@ final class StoreKitManager: ObservableObject {
 
     @discardableResult
     func refreshCurrentEntitlements() async -> StoreEntitlementRefreshSummary {
+        let checkedAt = Date()
         var verifiedTransactions = 0
         var appliedTransactions = 0
+        var sevenDayPassExpiresAt: Date?
+        var hasLifetimePass = false
 
         for await result in Transaction.currentEntitlements {
             do {
                 let transaction = try checkVerified(result)
                 verifiedTransactions += 1
-                if apply(transaction) {
+
+                guard transaction.revocationDate == nil else {
+                    continue
+                }
+
+                guard let productID = PurchaseProductID.matching(productID: transaction.productID) else {
+                    continue
+                }
+
+                switch productID {
+                case .sevenDayPass:
+                    let expiry = sevenDayPassExpiry(for: transaction)
+                    guard expiry > checkedAt else {
+                        continue
+                    }
+
+                    if sevenDayPassExpiresAt == nil || expiry > sevenDayPassExpiresAt! {
+                        sevenDayPassExpiresAt = expiry
+                    }
+                    appliedTransactions += 1
+                case .lifetimePass:
+                    hasLifetimePass = true
                     appliedTransactions += 1
                 }
             } catch {
@@ -182,7 +206,11 @@ final class StoreKitManager: ObservableObject {
             }
         }
 
-        appState?.markTransactionCheck()
+        appState?.replaceEntitlementState(
+            sevenDayPassExpiresAt: sevenDayPassExpiresAt,
+            hasLifetimePass: hasLifetimePass,
+            checkedAt: checkedAt
+        )
         return StoreEntitlementRefreshSummary(
             verifiedTransactions: verifiedTransactions,
             appliedTransactions: appliedTransactions
@@ -222,7 +250,7 @@ final class StoreKitManager: ObservableObject {
 
         switch productID {
         case .sevenDayPass:
-            let expiry = Calendar.current.date(byAdding: .day, value: 7, to: transaction.purchaseDate) ?? transaction.purchaseDate
+            let expiry = sevenDayPassExpiry(for: transaction)
             guard expiry > Date() else {
                 return false
             }
@@ -231,6 +259,10 @@ final class StoreKitManager: ObservableObject {
         case .lifetimePass:
             return appState?.applyPurchasedProduct(id: transaction.productID, purchaseDate: transaction.purchaseDate) ?? false
         }
+    }
+
+    private func sevenDayPassExpiry(for transaction: Transaction) -> Date {
+        Calendar.current.date(byAdding: .day, value: 7, to: transaction.purchaseDate) ?? transaction.purchaseDate
     }
 
     private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {

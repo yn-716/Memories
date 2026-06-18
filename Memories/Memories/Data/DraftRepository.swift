@@ -127,7 +127,8 @@ struct DraftRepository {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(records)
-        try data.write(to: indexURL, options: [.atomic])
+        try data.write(to: indexURL, options: protectedWriteOptions)
+        protectItemIfPossible(at: indexURL)
     }
 
     private func writeImage(_ image: UIImage, maxLongSide: CGFloat, quality: CGFloat, to url: URL) throws {
@@ -136,13 +137,45 @@ struct DraftRepository {
             throw DraftRepositoryError.imageWriteFailed
         }
 
-        try data.write(to: url, options: [.atomic])
+        try data.write(to: url, options: protectedWriteOptions)
+        protectItemIfPossible(at: url)
     }
 
     private func ensureDirectories() throws {
-        try fileManager.createDirectory(at: draftsDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: imagesDirectory, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: thumbnailsDirectory, withIntermediateDirectories: true)
+        try createProtectedDirectory(at: draftsDirectory)
+        try createProtectedDirectory(at: imagesDirectory)
+        try createProtectedDirectory(at: thumbnailsDirectory)
+        protectItemIfPossible(at: indexURL)
+        protectExistingItemsIfPossible(in: imagesDirectory)
+        protectExistingItemsIfPossible(in: thumbnailsDirectory)
+    }
+
+    private func createProtectedDirectory(at url: URL) throws {
+        try fileManager.createDirectory(
+            at: url,
+            withIntermediateDirectories: true,
+            attributes: protectedFileAttributes
+        )
+        protectItemIfPossible(at: url)
+    }
+
+    private func protectExistingItemsIfPossible(in directory: URL) {
+        guard let urls = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+
+        urls.forEach { protectItemIfPossible(at: $0) }
+    }
+
+    private func protectItemIfPossible(at url: URL) {
+        guard fileManager.fileExists(atPath: url.path) else {
+            return
+        }
+
+        try? fileManager.setAttributes(protectedFileAttributes, ofItemAtPath: url.path)
     }
 
     private var applicationSupportDirectory: URL {
@@ -163,6 +196,14 @@ struct DraftRepository {
 
     private var indexURL: URL {
         draftsDirectory.appendingPathComponent("drafts.json")
+    }
+
+    private var protectedWriteOptions: Data.WritingOptions {
+        [.atomic, .completeFileProtection]
+    }
+
+    private var protectedFileAttributes: [FileAttributeKey: Any] {
+        [.protectionKey: FileProtectionType.complete]
     }
 }
 

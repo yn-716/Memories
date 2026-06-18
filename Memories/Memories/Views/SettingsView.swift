@@ -18,6 +18,7 @@ struct SettingsView: View {
             List {
                 planSection
                 languageSection
+                privacySection
                 versionSection
 
                 #if DEBUG
@@ -99,6 +100,25 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+        }
+    }
+
+    private var privacySection: some View {
+        Section(appState.t("settings.privacy")) {
+            Toggle(isOn: $appState.suggestPlaceFromPhotoLocation) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.t("settings.suggestPlaceFromPhotoLocation"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+
+                    Text(appState.t("settings.suggestPlaceFromPhotoLocationDescription"))
+                        .font(.caption)
+                        .foregroundStyle(MemoriesTheme.textSub)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 4)
+            }
+            .tint(MemoriesTheme.accentDeep)
         }
     }
 

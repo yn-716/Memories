@@ -81,13 +81,17 @@ enum CardDateMode: String, Codable, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
 
     var displayName: String {
+        displayName(language: .japanese)
+    }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
         switch self {
         case .single:
-            return "1日"
+            return MemoriesLocalization.text("date.single", language: language)
         case .range:
-            return "期間"
+            return MemoriesLocalization.text("date.range", language: language)
         case .custom:
-            return "自由入力"
+            return MemoriesLocalization.text("date.custom", language: language)
         }
     }
 }
@@ -211,15 +215,19 @@ enum OverlayPosition: String, Codable, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
 
     var displayName: String {
+        displayName(language: .japanese)
+    }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
         switch self {
         case .topLeft:
-            return "左上"
+            return language == .japanese ? "左上" : "Top Left"
         case .topRight:
-            return "右上"
+            return language == .japanese ? "右上" : "Top Right"
         case .bottomLeft:
-            return "左下"
+            return language == .japanese ? "左下" : "Bottom Left"
         case .bottomRight:
-            return "右下"
+            return language == .japanese ? "右下" : "Bottom Right"
         }
     }
 
@@ -284,15 +292,15 @@ enum ThemeIconType: String, Codable, CaseIterable, Hashable, Identifiable {
         case .walk:
             return LocalizedDisplayName(ja: "散歩", en: "Walk")
         case .napDog:
-            return LocalizedDisplayName(ja: "お昼寝 犬", en: "Dog Nap")
+            return LocalizedDisplayName(ja: "お昼寝 犬", en: "Nap Dog")
         case .napCat:
-            return LocalizedDisplayName(ja: "お昼寝 猫", en: "Cat Nap")
+            return LocalizedDisplayName(ja: "お昼寝 猫", en: "Nap Cat")
         case .travel:
             return LocalizedDisplayName(ja: "旅行", en: "Travel")
         case .hospital:
-            return LocalizedDisplayName(ja: "病院", en: "Hospital")
+            return LocalizedDisplayName(ja: "病院", en: "Vet")
         case .shampoo:
-            return LocalizedDisplayName(ja: "シャンプー", en: "Shampoo")
+            return LocalizedDisplayName(ja: "シャンプー", en: "Bath")
         case .cafe:
             return LocalizedDisplayName(ja: "カフェ", en: "Cafe")
         case .home:
@@ -369,7 +377,7 @@ enum WeatherType: String, Codable, CaseIterable, Hashable, Identifiable {
         case .sunny:
             return LocalizedDisplayName(ja: "晴れ", en: "Sunny")
         case .cloudy:
-            return LocalizedDisplayName(ja: "くもり", en: "Cloudy")
+            return LocalizedDisplayName(ja: "曇り", en: "Cloudy")
         case .rainy:
             return LocalizedDisplayName(ja: "雨", en: "Rainy")
         case .snowy:
@@ -445,6 +453,33 @@ enum TextColorOption: String, Codable, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
 
     var displayName: String {
+        displayName(language: .english)
+    }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        if language == .japanese {
+            switch self {
+            case .black:
+                return "黒"
+            case .white:
+                return "白"
+            case .gray:
+                return "グレー"
+            case .beige:
+                return "ベージュ"
+            case .navy:
+                return "ネイビー"
+            case .brown:
+                return "ブラウン"
+            case .deepGreen:
+                return "深緑"
+            case .dustyBlue:
+                return "ダスティブルー"
+            case .paleBlue:
+                return "ペールブルー"
+            }
+        }
+
         switch self {
         case .black:
             return "Black"
@@ -601,6 +636,10 @@ enum CardAspectRatio: String, Codable, CaseIterable, Hashable, Identifiable {
 struct LocalizedDisplayName: Hashable {
     let ja: String
     let en: String
+
+    func localized(for language: ResolvedAppLanguage) -> String {
+        language == .japanese ? ja : en
+    }
 }
 
 extension Template {

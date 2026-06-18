@@ -58,7 +58,8 @@ struct DraftRepository {
         template: Template,
         editState: CardEditState,
         photoImage: UIImage?,
-        existingDraftID: UUID?
+        existingDraftID: UUID?,
+        draftLimit: Int = Self.draftLimit
     ) throws -> DraftRecord {
         guard let photoImage else {
             throw DraftRepositoryError.imageMissing
@@ -71,7 +72,7 @@ struct DraftRepository {
         let id = existingDraftID ?? UUID()
         let isUpdating = records.contains { $0.id == id }
 
-        if !isUpdating && records.count >= Self.draftLimit {
+        if !isUpdating && records.count >= draftLimit {
             throw DraftRepositoryError.limitReached
         }
 

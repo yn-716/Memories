@@ -8,15 +8,6 @@ enum WatermarkExportOption: String, CaseIterable, Identifiable, Hashable {
         rawValue
     }
 
-    var title: String {
-        switch self {
-        case .withWatermark:
-            return "あり"
-        case .withoutWatermark:
-            return "なし"
-        }
-    }
-
     var watermarkMode: WatermarkMode {
         switch self {
         case .withWatermark:
@@ -53,18 +44,6 @@ struct WatermarkAccessSnapshot: Hashable {
     let canExportWithoutWatermark: Bool
     let remainingFreeExportsToday: Int
     let hasUnlimitedAccess: Bool
-
-    var withoutWatermarkStatusText: String {
-        if hasUnlimitedAccess {
-            return "無制限"
-        }
-
-        if remainingFreeExportsToday > 0 {
-            return "本日あと\(remainingFreeExportsToday)回"
-        }
-
-        return "本日分を使用済み"
-    }
 }
 
 struct DailyWatermarkFreeExportStore {
@@ -123,7 +102,23 @@ struct WatermarkAccessPolicy {
     var entitlementState: EntitlementState
     var freeExportStore: DailyWatermarkFreeExportStore
     var now: Date
+    #if DEBUG
+    var debugOverride: DebugEntitlementOverride
+    #endif
 
+    #if DEBUG
+    init(
+        entitlementState: EntitlementState,
+        freeExportStore: DailyWatermarkFreeExportStore = .shared,
+        now: Date = Date(),
+        debugOverride: DebugEntitlementOverride = .none
+    ) {
+        self.entitlementState = entitlementState
+        self.freeExportStore = freeExportStore
+        self.now = now
+        self.debugOverride = debugOverride
+    }
+    #else
     init(
         entitlementState: EntitlementState,
         freeExportStore: DailyWatermarkFreeExportStore = .shared,
@@ -133,8 +128,34 @@ struct WatermarkAccessPolicy {
         self.freeExportStore = freeExportStore
         self.now = now
     }
+    #endif
 
     var snapshot: WatermarkAccessSnapshot {
+        #if DEBUG
+        switch debugOverride {
+        case .none, .sevenDayExpired:
+            break
+        case .free:
+            return WatermarkAccessSnapshot(
+                canExportWithoutWatermark: true,
+                remainingFreeExportsToday: 1,
+                hasUnlimitedAccess: false
+            )
+        case .freeUsedToday:
+            return WatermarkAccessSnapshot(
+                canExportWithoutWatermark: false,
+                remainingFreeExportsToday: 0,
+                hasUnlimitedAccess: false
+            )
+        case .sevenDayActive, .lifetime:
+            return WatermarkAccessSnapshot(
+                canExportWithoutWatermark: true,
+                remainingFreeExportsToday: 0,
+                hasUnlimitedAccess: true
+            )
+        }
+        #endif
+
         let hasUnlimitedAccess = entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now)
         let remaining = hasUnlimitedAccess ? Int.max : freeExportStore.remainingExports(on: now)
 
@@ -158,6 +179,19 @@ struct WatermarkAccessPolicy {
         guard option == .withoutWatermark else {
             return true
         }
+
+        #if DEBUG
+        switch debugOverride {
+        case .none, .sevenDayExpired:
+            break
+        case .free:
+            return true
+        case .freeUsedToday:
+            return false
+        case .sevenDayActive, .lifetime:
+            return true
+        }
+        #endif
 
         if entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now) {
             return true

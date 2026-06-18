@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct MemoriesApp: App {
+    @StateObject private var appState = MemoriesAppState()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appState)
+                .environment(\.locale, Locale(identifier: appState.localeIdentifier))
         }
     }
 }

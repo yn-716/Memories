@@ -1,5 +1,15 @@
 import SwiftUI
 
+enum MemoriesLayoutMetrics {
+    static let homeMaxWidth: CGFloat = 600
+    static let editorMaxWidth: CGFloat = 720
+    static let previewMaxWidth: CGFloat = 720
+    static let purchaseMaxWidth: CGFloat = 620
+    static let settingsMaxWidth: CGFloat = 680
+    static let draftsMaxWidth: CGFloat = 680
+    static let sheetMaxWidth: CGFloat = 540
+}
+
 struct MemoriesPrimaryButton: View {
     let title: String
     let systemImage: String?
@@ -27,6 +37,9 @@ struct MemoriesPrimaryButtonLabel: View {
         Label {
             Text(title)
                 .font(.headline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .layoutPriority(1)
         } icon: {
             if let systemImage {
                 Image(systemName: systemImage)
@@ -69,6 +82,9 @@ struct MemoriesSecondaryButton: View {
             Label {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .layoutPriority(1)
             } icon: {
                 if let systemImage {
                     Image(systemName: systemImage)
@@ -119,6 +135,8 @@ struct MemoriesPillTab: View {
         Button(action: action) {
             Text(title)
                 .font(.footnote.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
                 .foregroundStyle(isSelected ? .white : MemoriesTheme.textSub)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)

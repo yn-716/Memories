@@ -2,8 +2,11 @@ import SwiftUI
 import UIKit
 
 struct DraftsView: View {
+    @EnvironmentObject private var appState: MemoriesAppState
+
     @State private var drafts: [DraftRecord] = []
     @State private var thumbnails: [UUID: UIImage] = [:]
+    @State private var pendingDeletion: DraftRecord?
 
     private let repository = DraftRepository.shared
     private let templates = TemplateRepository.bundled.loadTemplates().templates
@@ -22,26 +25,39 @@ struct DraftsView: View {
                 }
             }
             .padding(20)
+            .frame(maxWidth: MemoriesLayoutMetrics.draftsMaxWidth)
+            .frame(maxWidth: .infinity)
         }
-        .navigationTitle("下書き")
+        .navigationTitle(appState.t("drafts.title"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             reloadDrafts()
+        }
+        .alert(appState.t("drafts.deleteQuestion"), isPresented: deleteConfirmationBinding) {
+            Button(appState.t("drafts.delete"), role: .destructive) {
+                deletePendingDraft()
+            }
+
+            Button(appState.t("common.cancel"), role: .cancel) {
+                pendingDeletion = nil
+            }
         }
     }
 
     private var header: some View {
         MemoriesGlassPanel {
             HStack {
-                Text("下書き")
+                Text(appState.t("drafts.title"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
 
                 Spacer()
 
-                Text("\(drafts.count)/\(DraftRepository.draftLimit)")
+                Text("\(drafts.count)/\(appState.draftLimit)")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.accentDeep)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
             .padding(16)
         }
@@ -57,7 +73,7 @@ struct DraftsView: View {
                     .background(MemoriesTheme.subBackground.opacity(0.82))
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Text("下書きはまだありません")
+                Text(appState.t("drafts.empty"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
             }
@@ -70,16 +86,39 @@ struct DraftsView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(drafts) { draft in
-                    NavigationLink {
-                        draftDestination(for: draft)
-                    } label: {
-                        DraftRow(
-                            draft: draft,
-                            thumbnail: thumbnails[draft.id],
-                            updatedText: Self.updatedFormatter.string(from: draft.updatedAt)
-                        )
+                    MemoriesGlassPanel {
+                        HStack(spacing: 10) {
+                            NavigationLink {
+                                draftDestination(for: draft)
+                            } label: {
+                                DraftRow(
+                                    draft: draft,
+                                    thumbnail: thumbnails[draft.id],
+                                    title: draftDisplayTitle(for: draft),
+                                    updatedText: appState.formattedDateTime(draft.updatedAt)
+                                )
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                pendingDeletion = draft
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.red.opacity(0.78))
+                                    .frame(width: 40, height: 40)
+                                    .background(MemoriesTheme.card.opacity(0.46))
+                                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                            .stroke(MemoriesTheme.border.opacity(0.62), lineWidth: 1)
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(appState.t("drafts.delete"))
+                        }
+                        .padding(12)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.vertical, 2)
@@ -114,12 +153,31 @@ struct DraftsView: View {
         )
     }
 
-    private static let updatedFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateFormat = "yyyy.MM.dd HH:mm"
-        return formatter
-    }()
+    private var deleteConfirmationBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeletion != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeletion = nil
+                }
+            }
+        )
+    }
+
+    private func draftDisplayTitle(for draft: DraftRecord) -> String {
+        let trimmed = draft.editState.mainText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? appState.t("drafts.untitled") : trimmed
+    }
+
+    private func deletePendingDraft() {
+        guard let pendingDeletion else {
+            return
+        }
+
+        try? repository.deleteDraft(id: pendingDeletion.id)
+        self.pendingDeletion = nil
+        reloadDrafts()
+    }
 }
 
 struct HistoryView: View {
@@ -131,31 +189,32 @@ struct HistoryView: View {
 private struct DraftRow: View {
     let draft: DraftRecord
     let thumbnail: UIImage?
+    let title: String
     let updatedText: String
 
     var body: some View {
-        MemoriesGlassPanel {
-            HStack(spacing: 12) {
-                thumbnailView
+        HStack(spacing: 12) {
+            thumbnailView
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(draft.title)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(MemoriesTheme.textMain)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(MemoriesTheme.textMain)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
-                    Text(updatedText)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(MemoriesTheme.textSub)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
+                Text(updatedText)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(MemoriesTheme.textSub)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
-            .padding(12)
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textSub)
         }
     }
 
@@ -185,12 +244,14 @@ private struct DraftRow: View {
 }
 
 private struct MissingDraftImageView: View {
+    @EnvironmentObject private var appState: MemoriesAppState
+
     var body: some View {
         ZStack {
             MemoriesTheme.background.ignoresSafeArea()
 
             MemoriesGlassPanel {
-                Text("下書き画像を読み込めませんでした")
+                Text(appState.t("drafts.missingImage"))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
                     .frame(maxWidth: .infinity)
@@ -198,7 +259,7 @@ private struct MissingDraftImageView: View {
             }
             .padding(24)
         }
-        .navigationTitle("下書き")
+        .navigationTitle(appState.t("drafts.title"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -206,5 +267,6 @@ private struct MissingDraftImageView: View {
 #Preview {
     NavigationStack {
         DraftsView()
+            .environmentObject(MemoriesAppState())
     }
 }

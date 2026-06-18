@@ -6,6 +6,7 @@ struct EditorView: View {
     let photoImage: UIImage?
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: MemoriesAppState
     @State private var editState: CardEditState
     @State private var lastPersistedEditState: CardEditState
     @State private var currentDraftID: UUID?
@@ -18,6 +19,8 @@ struct EditorView: View {
     @State private var isPreparingOutput = false
     @State private var outputAlert: OutputAlert?
     @State private var previewRoute: PreviewRoute?
+    @State private var showDraftLimitAlert = false
+    @State private var showDraftsFromLimit = false
 
     init(
         template: Template,
@@ -58,9 +61,11 @@ struct EditorView: View {
                     .padding(.bottom, 10)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: MemoriesLayoutMetrics.editorMaxWidth)
+            .frame(maxWidth: .infinity)
         }
         .background(MemoriesTheme.background.ignoresSafeArea())
-        .navigationTitle("編集")
+        .navigationTitle(appState.t("editor.title"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -90,8 +95,10 @@ struct EditorView: View {
                             await saveDraft()
                         }
                     } label: {
-                        Text("下書き保存")
+                        Text(appState.t("editor.saveDraft"))
                             .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.74)
                             .foregroundStyle(MemoriesTheme.accentDeep)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
@@ -114,8 +121,10 @@ struct EditorView: View {
                             draftID: currentDraftID
                         )
                     } label: {
-                        Text("プレビュー")
+                        Text(appState.t("editor.preview"))
                             .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -138,30 +147,39 @@ struct EditorView: View {
             }
         }
         .confirmationDialog(
-            "この編集内容を下書きに保存しますか？",
+            appState.t("editor.unsaved.title"),
             isPresented: $showBackConfirmation,
             titleVisibility: .visible
         ) {
-            Button("下書き保存") {
+            Button(appState.t("editor.saveDraft")) {
                 Task {
                     await saveDraft(shouldDismissAfterSave: true)
                 }
             }
 
-            Button("破棄して戻る", role: .destructive) {
+            Button(appState.t("editor.discard"), role: .destructive) {
                 dismiss()
             }
 
-            Button("編集を続ける", role: .cancel) {}
+            Button(appState.t("editor.continue"), role: .cancel) {}
         } message: {
-            Text("下書き保存は明示操作のみです。")
+            Text(appState.t("editor.unsaved.message"))
         }
         .alert(item: $outputAlert) { alert in
             Alert(
                 title: Text(alert.title),
                 message: alert.message.map(Text.init),
-                dismissButton: .default(Text("OK"))
+                dismissButton: .default(Text(appState.t("common.ok")))
             )
+        }
+        .alert(appState.t("drafts.full.title"), isPresented: $showDraftLimitAlert) {
+            Button(appState.t("drafts.manage")) {
+                showDraftsFromLimit = true
+            }
+
+            Button(appState.t("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(String(format: appState.t("drafts.full.message"), appState.draftLimit))
         }
         .sheet(isPresented: $showDateEditSheet) {
             DateEditSheet(editState: editState) { payload in
@@ -195,13 +213,16 @@ struct EditorView: View {
                 }
             }
         }
+        .navigationDestination(isPresented: $showDraftsFromLimit) {
+            DraftsView()
+        }
         .overlay {
             if isPreparingOutput {
                 ZStack {
                     Color.black.opacity(0.12)
                         .ignoresSafeArea()
 
-                    ProgressView("下書きを保存中...")
+                    ProgressView(appState.t("editor.savingDraft"))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(MemoriesTheme.textMain)
                         .tint(MemoriesTheme.accentDeep)
@@ -262,7 +283,7 @@ struct EditorView: View {
     private var tabBar: some View {
         HStack(spacing: 7) {
             ForEach(EditorPanelTab.allCases) { tab in
-                MemoriesPillTab(title: tab.title, isSelected: selectedTab == tab) {
+                MemoriesPillTab(title: tab.title(language: appState.resolvedLanguage), isSelected: selectedTab == tab) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         selectedTab = tab
                     }
@@ -290,14 +311,14 @@ struct EditorView: View {
 
         return VStack(alignment: .leading, spacing: 9) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("文字項目")
+                Text(appState.t("editor.textItems"))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textSub)
 
                 HStack(spacing: 6) {
                     ForEach(TextEditTarget.allCases) { target in
                         SubItemChip(
-                            title: target.title,
+                            title: target.title(language: appState.resolvedLanguage),
                             isSelected: selectedTextTarget == target
                         ) {
                             withAnimation(.easeInOut(duration: 0.16)) {
@@ -310,7 +331,7 @@ struct EditorView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 HStack(spacing: 10) {
-                    Label(target.editorTitle, systemImage: target.systemImage)
+                    Label(target.editorTitle(language: appState.resolvedLanguage), systemImage: target.systemImage)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(MemoriesTheme.textMain)
 
@@ -319,7 +340,7 @@ struct EditorView: View {
                     CompactVisibilityToggle(isOn: visibilityBinding(for: target))
                 }
 
-                Text(target.hint)
+                Text(target.hint(language: appState.resolvedLanguage))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(MemoriesTheme.textSub)
                     .lineLimit(1)
@@ -344,7 +365,7 @@ struct EditorView: View {
         let text = textBinding(for: target)
 
         return VStack(spacing: 7) {
-            TextField(target.placeholder, text: text)
+            TextField(target.placeholder(language: appState.resolvedLanguage), text: text)
                 .textInputAutocapitalization(.never)
                 .submitLabel(.done)
                 .font(.subheadline.weight(.medium))
@@ -362,7 +383,7 @@ struct EditorView: View {
             HStack {
                 Spacer()
 
-                Text("\(text.wrappedValue.count) / \(target.characterLimit) 文字目安")
+                Text(String(format: appState.t("editor.characterGuide"), text.wrappedValue.count, target.characterLimit))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textSub)
             }
@@ -372,13 +393,13 @@ struct EditorView: View {
     private var dateEditor: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(editState.displayDateText.trimmedForEditor.isEmpty ? "未入力" : editState.displayDateText)
+                Text(editState.displayDateText.trimmedForEditor.isEmpty ? appState.t("editor.empty") : editState.displayDateText)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
                     .lineLimit(1)
                     .minimumScaleFactor(0.76)
 
-                Text(editState.dateMode.displayName)
+                Text(editState.dateMode.displayName(language: appState.resolvedLanguage))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textSub)
             }
@@ -388,7 +409,7 @@ struct EditorView: View {
             Button {
                 showDateEditSheet = true
             } label: {
-                Label("変更", systemImage: "calendar")
+                Label(appState.t("common.change"), systemImage: "calendar")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.accentDeep)
                     .padding(.horizontal, 12)
@@ -417,7 +438,7 @@ struct EditorView: View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 CompactPanelChip(
-                    title: "テーマ",
+                    title: appState.t("editor.theme"),
                     systemImage: "pawprint",
                     isSelected: selectedIconSection == .theme
                 ) {
@@ -427,7 +448,7 @@ struct EditorView: View {
                 }
 
                 CompactPanelChip(
-                    title: "天気",
+                    title: appState.t("editor.weather"),
                     systemImage: "sun.max",
                     isSelected: selectedIconSection == .weather
                 ) {
@@ -438,7 +459,7 @@ struct EditorView: View {
             }
 
             HStack(spacing: 10) {
-                Label(selectedIconSection.title, systemImage: selectedIconSection.systemImage)
+                Label(selectedIconSection.title(language: appState.resolvedLanguage), systemImage: selectedIconSection.systemImage)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textMain)
 
@@ -451,7 +472,7 @@ struct EditorView: View {
                 LazyVGrid(columns: iconColumns(count: 5), spacing: 7) {
                     ForEach(ThemeIconType.allCases) { icon in
                         CompactIconOptionButton(
-                            title: icon.displayName.ja,
+                            title: icon.displayName.localized(for: appState.resolvedLanguage),
                             systemImage: icon.symbolName,
                             assetName: icon.assetName,
                             isSelected: editState.selectedThemeIcon == icon
@@ -464,7 +485,7 @@ struct EditorView: View {
                 LazyVGrid(columns: iconColumns(count: 5), spacing: 7) {
                     ForEach(WeatherType.allCases) { weather in
                         CompactIconOptionButton(
-                            title: weather.editorDisplayName,
+                            title: weather.editorDisplayName(language: appState.resolvedLanguage),
                             systemImage: weather.symbolName ?? "minus.circle",
                             assetName: weather.assetName,
                             isSelected: editState.selectedWeather == weather
@@ -481,7 +502,7 @@ struct EditorView: View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 CompactPanelChip(
-                    title: "フォント",
+                    title: appState.t("editor.font"),
                     systemImage: "textformat",
                     isSelected: selectedAppearanceSection == .font
                 ) {
@@ -491,7 +512,7 @@ struct EditorView: View {
                 }
 
                 CompactPanelChip(
-                    title: "色",
+                    title: appState.t("editor.color"),
                     systemImage: "paintpalette",
                     isSelected: selectedAppearanceSection == .color
                 ) {
@@ -518,7 +539,7 @@ struct EditorView: View {
                 LazyVGrid(columns: iconColumns(count: 3), spacing: 8) {
                     ForEach(TextColorOption.allCases) { colorOption in
                         CompactColorOptionButton(
-                            title: colorOption.displayName,
+                            title: colorOption.displayName(language: appState.resolvedLanguage),
                             color: colorOption.color,
                             isSelected: editState.selectedTextColor == colorOption
                         ) {
@@ -639,6 +660,11 @@ struct EditorView: View {
 
     @MainActor
     private func saveDraft(shouldDismissAfterSave: Bool = false) async {
+        guard canSaveDraft(existingDraftID: currentDraftID) else {
+            showDraftLimitAlert = true
+            return
+        }
+
         isPreparingOutput = true
         defer { isPreparingOutput = false }
 
@@ -647,7 +673,8 @@ struct EditorView: View {
                 template: template,
                 editState: editState,
                 photoImage: photoImage,
-                existingDraftID: currentDraftID
+                existingDraftID: currentDraftID,
+                draftLimit: appState.draftLimit
             )
             currentDraftID = record.id
             lastPersistedEditState = editState
@@ -655,10 +682,10 @@ struct EditorView: View {
             if shouldDismissAfterSave {
                 dismiss()
             } else {
-                outputAlert = OutputAlert(title: "下書きに保存しました", message: nil)
+                outputAlert = OutputAlert(title: appState.t("editor.draftSaved"), message: nil)
             }
         } catch {
-            outputAlert = OutputAlert(title: "下書き保存できませんでした", message: error.localizedDescription)
+            outputAlert = OutputAlert(title: appState.t("editor.draftSaveFailed"), message: error.localizedDescription)
         }
     }
 
@@ -668,6 +695,14 @@ struct EditorView: View {
 
     private func editorPanelHeight(for size: CGSize) -> CGFloat {
         min(max(size.height * 0.36, 252), size.height * 0.4)
+    }
+
+    private func canSaveDraft(existingDraftID: UUID?) -> Bool {
+        if existingDraftID != nil {
+            return true
+        }
+
+        return DraftRepository.shared.loadDrafts().count < appState.draftLimit
     }
 }
 
@@ -705,6 +740,7 @@ private struct DateEditSheet: View {
     let onApply: (DateEditPayload) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: MemoriesAppState
     @State private var tempDateMode: CardDateMode
     @State private var tempSelectedDate: Date
     @State private var tempStartDate: Date
@@ -733,8 +769,10 @@ private struct DateEditSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
                 .padding(.bottom, 14)
+                .frame(maxWidth: MemoriesLayoutMetrics.sheetMaxWidth)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle("日付を選択")
+            .navigationTitle(appState.t("date.select"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents(presentationDetents)
@@ -745,11 +783,11 @@ private struct DateEditSheet: View {
         MemoriesGlassPanel {
             VStack(alignment: .leading, spacing: 13) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("日付を編集")
+                    Text(appState.t("date.edit"))
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(MemoriesTheme.textMain)
 
-                    Text("適用するまでカードには反映されません")
+                    Text(appState.t("date.notApplied"))
                         .font(.caption.weight(.medium))
                         .foregroundStyle(MemoriesTheme.textSub)
                 }
@@ -767,11 +805,11 @@ private struct DateEditSheet: View {
 
     private var actionButtons: some View {
         HStack(spacing: 10) {
-            MemoriesSecondaryButton("キャンセル") {
+            MemoriesSecondaryButton(appState.t("common.cancel")) {
                 dismiss()
             }
 
-            MemoriesPrimaryButton("適用", systemImage: "checkmark") {
+            MemoriesPrimaryButton(appState.t("common.apply"), systemImage: "checkmark") {
                 applyDate()
             }
         }
@@ -779,13 +817,13 @@ private struct DateEditSheet: View {
 
     private var displayPreviewRow: some View {
         HStack {
-            Text("表示予定")
+            Text(appState.t("date.preview"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(MemoriesTheme.textSub)
 
             Spacer()
 
-            Text(tempDisplayText.trimmedForEditor.isEmpty ? "未入力" : tempDisplayText)
+            Text(tempDisplayText.trimmedForEditor.isEmpty ? appState.t("editor.empty") : tempDisplayText)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(MemoriesTheme.textMain)
                 .lineLimit(1)
@@ -821,8 +859,10 @@ private struct DateEditSheet: View {
                         normalizeRange()
                     }
                 } label: {
-                    Text(mode.displayName)
+                    Text(mode.displayName(language: appState.resolvedLanguage))
                         .font(.caption.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
                         .foregroundStyle(tempDateMode == mode ? MemoriesTheme.accentDeep : MemoriesTheme.textSub)
@@ -846,7 +886,7 @@ private struct DateEditSheet: View {
         switch tempDateMode {
         case .single:
             VStack(alignment: .leading, spacing: 8) {
-                Text("1日")
+                Text(appState.t("date.single"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textSub)
 
@@ -867,12 +907,12 @@ private struct DateEditSheet: View {
 
         case .range:
             VStack(alignment: .leading, spacing: 10) {
-                Text("期間")
+                Text(appState.t("date.range"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.textSub)
 
-                datePickerRow(title: "開始日", selection: tempStartDateBinding)
-                datePickerRow(title: "終了日", selection: tempEndDateBinding)
+                datePickerRow(title: appState.t("date.start"), selection: tempStartDateBinding)
+                datePickerRow(title: appState.t("date.end"), selection: tempEndDateBinding)
             }
 
         case .custom:
@@ -895,7 +935,7 @@ private struct DateEditSheet: View {
                 HStack {
                     Spacer()
 
-                    Text("\(tempCustomDateText.count) / 30 文字目安")
+                    Text(String(format: appState.t("editor.characterGuide"), tempCustomDateText.count, 30))
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(MemoriesTheme.textSub)
                 }
@@ -987,16 +1027,16 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    var title: String {
+    func title(language: ResolvedAppLanguage) -> String {
         switch self {
         case .text:
-            return "文字"
+            return MemoriesLocalization.text("editor.text", language: language)
         case .icon:
-            return "アイコン"
+            return MemoriesLocalization.text("editor.icon", language: language)
         case .appearance:
-            return "見た目"
+            return MemoriesLocalization.text("editor.appearance", language: language)
         case .position:
-            return "配置"
+            return MemoriesLocalization.text("editor.position", language: language)
         }
     }
 }
@@ -1009,55 +1049,55 @@ private enum TextEditTarget: CaseIterable, Identifiable {
 
     var id: Self { self }
 
-    var title: String {
+    func title(language: ResolvedAppLanguage) -> String {
         switch self {
         case .main:
-            return "メイン"
+            return MemoriesLocalization.text("editor.main", language: language)
         case .sub:
-            return "サブ"
+            return MemoriesLocalization.text("editor.sub", language: language)
         case .location:
-            return "場所"
+            return MemoriesLocalization.text("editor.location", language: language)
         case .date:
-            return "日付"
+            return MemoriesLocalization.text("editor.date", language: language)
         }
     }
 
-    var editorTitle: String {
+    func editorTitle(language: ResolvedAppLanguage) -> String {
         switch self {
         case .main:
-            return "メインテキスト"
+            return MemoriesLocalization.text("editor.mainText", language: language)
         case .sub:
-            return "サブテキスト"
+            return MemoriesLocalization.text("editor.subText", language: language)
         case .location:
-            return "場所"
+            return MemoriesLocalization.text("editor.location", language: language)
         case .date:
-            return "日付"
+            return MemoriesLocalization.text("editor.date", language: language)
         }
     }
 
-    var placeholder: String {
+    func placeholder(language: ResolvedAppLanguage) -> String {
         switch self {
         case .main:
-            return "My Pet / 今日の散歩 / Cafe Day"
+            return MemoriesLocalization.text("editor.mainPlaceholder", language: language)
         case .sub:
-            return "犬種・猫種 / 年齢 / 今日のテーマ"
+            return MemoriesLocalization.text("editor.subPlaceholder", language: language)
         case .location:
-            return "Park / Cafe / Home"
+            return MemoriesLocalization.text("editor.locationPlaceholder", language: language)
         case .date:
             return "2026.06.17"
         }
     }
 
-    var hint: String {
+    func hint(language: ResolvedAppLanguage) -> String {
         switch self {
         case .main:
-            return "名前や、写真のタイトル"
+            return MemoriesLocalization.text("editor.mainHint", language: language)
         case .sub:
-            return "写真の詳細"
+            return MemoriesLocalization.text("editor.subHint", language: language)
         case .location:
-            return "写真の場所やシーン"
+            return MemoriesLocalization.text("editor.locationHint", language: language)
         case .date:
-            return "写真の日付や期間"
+            return MemoriesLocalization.text("editor.dateHint", language: language)
         }
     }
 
@@ -1092,12 +1132,12 @@ private enum IconEditSection {
     case theme
     case weather
 
-    var title: String {
+    func title(language: ResolvedAppLanguage) -> String {
         switch self {
         case .theme:
-            return "テーマアイコン"
+            return MemoriesLocalization.text("editor.themeIcon", language: language)
         case .weather:
-            return "天気アイコン"
+            return MemoriesLocalization.text("editor.weatherIcon", language: language)
         }
     }
 
@@ -1192,11 +1232,12 @@ private struct SubItemChip: View {
 }
 
 private struct CompactVisibilityToggle: View {
+    @EnvironmentObject private var appState: MemoriesAppState
     @Binding var isOn: Bool
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            Text("表示")
+            Text(appState.t("editor.display"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(MemoriesTheme.textSub)
         }
@@ -1321,6 +1362,8 @@ private struct CompactColorOptionButton: View {
 }
 
 private struct PositionPresetButton: View {
+    @EnvironmentObject private var appState: MemoriesAppState
+
     let position: OverlayPosition
     let isSelected: Bool
     let action: () -> Void
@@ -1344,7 +1387,7 @@ private struct PositionPresetButton: View {
                 }
                 .frame(width: 58, height: 46)
 
-                Text(position.displayName)
+                Text(position.displayName(language: appState.resolvedLanguage))
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(isSelected ? MemoriesTheme.accentDeep : MemoriesTheme.textMain)
 
@@ -1363,12 +1406,12 @@ private struct PositionPresetButton: View {
 }
 
 private extension WeatherType {
-    var editorDisplayName: String {
+    func editorDisplayName(language: ResolvedAppLanguage) -> String {
         switch self {
         case .none:
-            return "未選択"
+            return displayName.localized(for: language)
         default:
-            return displayName.ja
+            return displayName.localized(for: language)
         }
     }
 }
@@ -1382,5 +1425,6 @@ private extension String {
 #Preview {
     NavigationStack {
         EditorView(template: .previewPetLifelog)
+            .environmentObject(MemoriesAppState())
     }
 }

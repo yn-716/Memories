@@ -1,0 +1,447 @@
+import Foundation
+
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case japanese
+    case english
+
+    var id: String { rawValue }
+
+    var resolvedLanguage: ResolvedAppLanguage {
+        switch self {
+        case .system:
+            return Locale.preferredLanguages.first?.hasPrefix("ja") == true ? .japanese : .english
+        case .japanese:
+            return .japanese
+        case .english:
+            return .english
+        }
+    }
+
+    func displayName(in language: ResolvedAppLanguage) -> String {
+        switch self {
+        case .system:
+            return language == .japanese ? "自動" : "Automatic"
+        case .japanese:
+            return "日本語"
+        case .english:
+            return "English"
+        }
+    }
+}
+
+enum ResolvedAppLanguage: String {
+    case japanese
+    case english
+
+    var localeIdentifier: String {
+        switch self {
+        case .japanese:
+            return "ja_JP"
+        case .english:
+            return "en_US"
+        }
+    }
+}
+
+enum MemoriesLocalization {
+    static func text(_ key: String, language: ResolvedAppLanguage) -> String {
+        #if DEBUG
+        let debugTable = language == .japanese ? debugJa : debugEn
+        if let value = debugTable[key] {
+            return value
+        }
+        #endif
+
+        let table = language == .japanese ? ja : en
+        return table[key] ?? en[key] ?? key
+    }
+
+    private static let ja: [String: String] = [
+        "app.name": "Memories",
+        "common.ok": "OK",
+        "common.close": "閉じる",
+        "common.cancel": "キャンセル",
+        "common.apply": "適用",
+        "common.change": "変更",
+        "common.loading": "読み込み中...",
+        "common.unlimited": "無制限",
+        "common.available": "未使用",
+        "common.used": "使用済み",
+
+        "home.tagline": "うちの子の今日を、おしゃれな1枚に",
+        "home.choosePhoto": "写真を選ぶ",
+        "home.drafts": "下書き",
+        "home.settings": "設定",
+        "home.photoLoadFailed": "写真を読み込めませんでした。別の写真でもう一度お試しください。",
+        "home.photoLoadError": "写真の読み込みに失敗しました。時間をおいてもう一度お試しください。",
+        "purchase.entry.title": "パスの購入",
+        "purchase.entry.subtitle": "ウォーターマークなしで保存",
+        "purchase.entry.cta": "パスを購入",
+
+        "editor.title": "編集",
+        "editor.saveDraft": "下書き保存",
+        "editor.preview": "プレビュー",
+        "editor.unsaved.title": "この編集内容を下書きに保存しますか？",
+        "editor.unsaved.message": "下書き保存は明示操作のみです。",
+        "editor.discard": "破棄して戻る",
+        "editor.continue": "編集を続ける",
+        "editor.savingDraft": "下書きを保存中...",
+        "editor.draftSaved": "下書きに保存しました",
+        "editor.draftSaveFailed": "下書き保存できませんでした",
+        "editor.text": "文字",
+        "editor.icon": "アイコン",
+        "editor.appearance": "見た目",
+        "editor.position": "配置",
+        "editor.textItems": "文字項目",
+        "editor.main": "メイン",
+        "editor.sub": "サブ",
+        "editor.location": "場所",
+        "editor.date": "日付",
+        "editor.mainText": "メインテキスト",
+        "editor.subText": "サブテキスト",
+        "editor.display": "表示",
+        "editor.empty": "未入力",
+        "editor.characterGuide": "%d / %d 文字目安",
+        "editor.mainHint": "名前や、写真のタイトル",
+        "editor.subHint": "写真の詳細",
+        "editor.locationHint": "写真の場所やシーン",
+        "editor.dateHint": "写真の日付や期間",
+        "editor.mainPlaceholder": "My Pet / 今日の散歩 / Cafe Day",
+        "editor.subPlaceholder": "犬種・猫種 / 年齢 / 今日のテーマ",
+        "editor.locationPlaceholder": "Park / Cafe / Home",
+        "editor.theme": "テーマ",
+        "editor.weather": "天気",
+        "editor.themeIcon": "テーマアイコン",
+        "editor.weatherIcon": "天気アイコン",
+        "editor.font": "フォント",
+        "editor.color": "色",
+
+        "date.select": "日付を選択",
+        "date.edit": "日付を編集",
+        "date.notApplied": "適用するまでカードには反映されません",
+        "date.preview": "表示予定",
+        "date.single": "1日",
+        "date.range": "期間",
+        "date.custom": "自由入力",
+        "date.start": "開始日",
+        "date.end": "終了日",
+        "date.applied": "日付を反映しました",
+
+        "preview.title": "プレビュー",
+        "preview.creating": "プレビューを作成中...",
+        "preview.processing": "処理中...",
+        "preview.savePhoto": "写真に保存",
+        "preview.share": "共有する",
+        "preview.backToEdit": "編集に戻る",
+        "preview.watermark": "ウォーターマーク",
+        "preview.withWatermark": "あり",
+        "preview.withoutWatermark": "なし",
+        "preview.withWatermarkFull": "ウォーターマークあり",
+        "preview.withoutWatermarkFull": "ウォーターマークなし",
+        "preview.withoutUnlimited": "パス有効",
+        "preview.withoutOnce": "なしは1日1回",
+        "preview.remainingToday": "本日あと%d回",
+        "preview.todayAvailable": "本日あと1回",
+        "preview.todayUsed": "本日分は使用済み",
+        "preview.needMore": "パスなら無制限",
+        "preview.viewPasses": "パスを購入",
+        "preview.purchaseWithout": "パスを購入",
+        "preview.lifetimeActive": "永久パス有効中",
+        "preview.sevenDayActive": "7日間パス有効中",
+        "preview.canSaveWithout": "ウォーターマークなし",
+        "preview.activeUntil": "%@まで",
+        "preview.confirmShareTitle": "ウォーターマークなしで共有しますか？",
+        "preview.confirmShareMessage": "本日の無料分を使用します。",
+        "preview.shareAction": "共有する",
+        "preview.saveComplete": "保存が完了しました。",
+        "preview.deleteDraft": "下書きを削除",
+        "preview.keepDraft": "下書きを残す",
+        "preview.saveDraft": "下書き保存",
+        "preview.finishNoDraft": "残さず終了",
+        "preview.deleteDraftQuestion": "この下書きを削除しますか？\n写真に保存した画像は残ります。",
+        "preview.keepDraftQuestion": "この編集内容を下書きに残しますか？\n下書きを残さなくても、写真に保存した画像は残ります。",
+        "preview.renderFailed": "プレビューを作成できませんでした",
+        "preview.imageGenerateFailed": "画像の生成に失敗しました。",
+        "preview.saveFailed": "保存できませんでした",
+        "preview.shareFailed": "共有できませんでした",
+        "preview.freeUsedTitle": "本日の無料枠を使用済みです",
+        "preview.freeUsedMessage": "ウォーターマークあり保存は無制限で使えます。",
+        "preview.freeUpdateFailed": "無料枠を更新できませんでした",
+        "preview.draftDeleteFailed": "下書きを削除できませんでした",
+
+        "drafts.title": "下書き",
+        "drafts.empty": "下書きはまだありません",
+        "drafts.untitled": "無題",
+        "drafts.missingImage": "下書き画像を読み込めませんでした",
+        "drafts.delete": "削除",
+        "drafts.deleteQuestion": "この下書きを削除しますか？",
+        "drafts.full.title": "下書きがいっぱいです",
+        "drafts.full.message": "下書きは最大%d件まで保存できます。",
+        "drafts.fullBeforeEdit.message": "新しい編集はできますが、下書きとして保存するには整理が必要です。",
+        "drafts.manage": "下書きを整理",
+
+        "settings.title": "設定",
+        "settings.version": "バージョン",
+        "settings.language": "言語",
+        "settings.plan": "プラン",
+        "settings.free": "無料",
+        "settings.sevenDayPass": "7日間パス",
+        "settings.lifetimePass": "永久パス",
+        "settings.planFree": "現在のプラン：無料",
+        "settings.planSevenDay": "現在のプラン：7日間パス",
+        "settings.planLifetime": "現在のプラン：永久パス",
+        "settings.activeUntil": "%@ まで有効",
+        "settings.canSaveWithout": "ウォーターマークなしで保存できます",
+        "settings.todayFree": "本日のウォーターマークなし保存：%@",
+        "settings.purchase": "パスを購入",
+        "settings.restore": "購入を復元",
+
+        "purchase.title": "パスの購入",
+        "purchase.description": "ウォーターマークなし",
+        "purchase.currentPlan.free": "現在のプラン：無料",
+        "purchase.currentPlan.sevenDay": "現在のプラン：7日間パス",
+        "purchase.currentPlan.lifetime": "現在のプラン：永久パス",
+        "purchase.todayStatus": "本日分：%@",
+        "purchase.remainingDays": "残り：あと%d日",
+        "purchase.remainingOneDay": "残り：あと1日",
+        "purchase.endsToday": "本日まで",
+        "purchase.noWatermarkAvailable": "ウォーターマークなしで保存できます",
+        "purchase.sevenDay.title": "7日間パス",
+        "purchase.sevenDay.subtitle": "7日間、ウォーターマークなし",
+        "purchase.sevenDay.detail": "",
+        "purchase.lifetime.title": "永久パス",
+        "purchase.lifetime.subtitle": "ずっとウォーターマークなし",
+        "purchase.lifetime.detail": "",
+        "purchase.purchase": "購入",
+        "purchase.active": "適用中",
+        "purchase.purchased": "購入済み",
+        "purchase.restore": "購入を復元",
+        "purchase.completed": "購入が完了しました",
+        "purchase.failed": "購入できませんでした",
+        "purchase.productsFailed": "商品情報を取得できませんでした",
+        "purchase.tryAgainLater": "時間をおいて再度お試しください",
+        "purchase.unavailable": "—",
+        "purchase.restored": "購入情報を復元しました",
+        "purchase.restoreFailed": "購入情報を復元できませんでした",
+        "purchase.comingSoon": "商品情報を確認中です"
+    ]
+
+    private static let en: [String: String] = [
+        "app.name": "Memories",
+        "common.ok": "OK",
+        "common.close": "Close",
+        "common.cancel": "Cancel",
+        "common.apply": "Apply",
+        "common.change": "Change",
+        "common.loading": "Loading...",
+        "common.unlimited": "Unlimited",
+        "common.available": "Available",
+        "common.used": "Used",
+
+        "home.tagline": "Turn your pet's day into a beautiful card",
+        "home.choosePhoto": "Choose Photo",
+        "home.drafts": "Drafts",
+        "home.settings": "Settings",
+        "home.photoLoadFailed": "Could not load this photo. Please try another one.",
+        "home.photoLoadError": "Photo loading failed. Please try again later.",
+        "purchase.entry.title": "Buy Pass",
+        "purchase.entry.subtitle": "Save without a watermark",
+        "purchase.entry.cta": "Buy Pass",
+
+        "editor.title": "Edit",
+        "editor.saveDraft": "Save Draft",
+        "editor.preview": "Preview",
+        "editor.unsaved.title": "Save this edit as a draft?",
+        "editor.unsaved.message": "Drafts are saved only when you choose to save them.",
+        "editor.discard": "Discard and Go Back",
+        "editor.continue": "Keep Editing",
+        "editor.savingDraft": "Saving draft...",
+        "editor.draftSaved": "Draft saved",
+        "editor.draftSaveFailed": "Could not save draft",
+        "editor.text": "Text",
+        "editor.icon": "Icons",
+        "editor.appearance": "Style",
+        "editor.position": "Position",
+        "editor.textItems": "Text Items",
+        "editor.main": "Main",
+        "editor.sub": "Sub",
+        "editor.location": "Location",
+        "editor.date": "Date",
+        "editor.mainText": "Main Text",
+        "editor.subText": "Sub Text",
+        "editor.display": "Show",
+        "editor.empty": "Empty",
+        "editor.characterGuide": "%d / %d chars",
+        "editor.mainHint": "Name or photo title",
+        "editor.subHint": "Photo details",
+        "editor.locationHint": "Place or scene",
+        "editor.dateHint": "Date or period",
+        "editor.mainPlaceholder": "My Pet / Morning Walk / Cafe Day",
+        "editor.subPlaceholder": "Breed / age / today's theme",
+        "editor.locationPlaceholder": "Park / Cafe / Home",
+        "editor.theme": "Theme",
+        "editor.weather": "Weather",
+        "editor.themeIcon": "Theme Icon",
+        "editor.weatherIcon": "Weather Icon",
+        "editor.font": "Font",
+        "editor.color": "Color",
+
+        "date.select": "Select Date",
+        "date.edit": "Edit Date",
+        "date.notApplied": "Changes appear after you apply them",
+        "date.preview": "Preview",
+        "date.single": "Single",
+        "date.range": "Range",
+        "date.custom": "Custom",
+        "date.start": "Start Date",
+        "date.end": "End Date",
+        "date.applied": "Date applied",
+
+        "preview.title": "Preview",
+        "preview.creating": "Creating preview...",
+        "preview.processing": "Processing...",
+        "preview.savePhoto": "Save",
+        "preview.share": "Share",
+        "preview.backToEdit": "Back to Edit",
+        "preview.watermark": "Watermark",
+        "preview.withWatermark": "On",
+        "preview.withoutWatermark": "Off",
+        "preview.withWatermarkFull": "With watermark",
+        "preview.withoutWatermarkFull": "Without watermark",
+        "preview.withoutUnlimited": "Pass active",
+        "preview.withoutOnce": "Off once/day",
+        "preview.remainingToday": "%d left today",
+        "preview.todayAvailable": "1 left today",
+        "preview.todayUsed": "Used today",
+        "preview.needMore": "Unlimited with pass",
+        "preview.viewPasses": "Buy Pass",
+        "preview.purchaseWithout": "Buy Pass",
+        "preview.lifetimeActive": "Lifetime Pass active",
+        "preview.sevenDayActive": "7-Day Pass active",
+        "preview.canSaveWithout": "No watermark",
+        "preview.activeUntil": "Until %@",
+        "preview.confirmShareTitle": "Share without a watermark?",
+        "preview.confirmShareMessage": "This uses today's free save.",
+        "preview.shareAction": "Share",
+        "preview.saveComplete": "Save complete.",
+        "preview.deleteDraft": "Delete Draft",
+        "preview.keepDraft": "Keep Draft",
+        "preview.saveDraft": "Save Draft",
+        "preview.finishNoDraft": "Finish Without Draft",
+        "preview.deleteDraftQuestion": "Delete this draft?\nThe saved photo will remain in Photos.",
+        "preview.keepDraftQuestion": "Keep this edit as a draft?\nThe saved photo will remain even without a draft.",
+        "preview.renderFailed": "Could not create preview",
+        "preview.imageGenerateFailed": "Image generation failed.",
+        "preview.saveFailed": "Could not save",
+        "preview.shareFailed": "Could not share",
+        "preview.freeUsedTitle": "Today's free save has been used",
+        "preview.freeUsedMessage": "Saving with a watermark is unlimited.",
+        "preview.freeUpdateFailed": "Could not update free save",
+        "preview.draftDeleteFailed": "Could not delete draft",
+
+        "drafts.title": "Drafts",
+        "drafts.empty": "No drafts yet",
+        "drafts.untitled": "Untitled",
+        "drafts.missingImage": "Could not load draft image",
+        "drafts.delete": "Delete",
+        "drafts.deleteQuestion": "Delete this draft?",
+        "drafts.full.title": "Drafts are full",
+        "drafts.full.message": "You can save up to %d drafts.",
+        "drafts.fullBeforeEdit.message": "You can keep editing, but you’ll need to delete a draft before saving a new one.",
+        "drafts.manage": "Manage Drafts",
+
+        "settings.title": "Settings",
+        "settings.version": "Version",
+        "settings.language": "Language",
+        "settings.plan": "Plan",
+        "settings.free": "Free",
+        "settings.sevenDayPass": "7-Day Pass",
+        "settings.lifetimePass": "Lifetime Pass",
+        "settings.planFree": "Current Plan: Free",
+        "settings.planSevenDay": "Current Plan: 7-Day Pass",
+        "settings.planLifetime": "Current Plan: Lifetime Pass",
+        "settings.activeUntil": "Active until %@",
+        "settings.canSaveWithout": "You can save without a watermark",
+        "settings.todayFree": "Today's watermark-free save: %@",
+        "settings.purchase": "Buy Pass",
+        "settings.restore": "Restore purchases",
+
+        "purchase.title": "Buy Pass",
+        "purchase.description": "No watermark",
+        "purchase.currentPlan.free": "Current Plan: Free",
+        "purchase.currentPlan.sevenDay": "Current Plan: 7-Day Pass",
+        "purchase.currentPlan.lifetime": "Current Plan: Lifetime Pass",
+        "purchase.todayStatus": "Today: %@",
+        "purchase.remainingDays": "Remaining: %d days",
+        "purchase.remainingOneDay": "Remaining: 1 day",
+        "purchase.endsToday": "Ends today",
+        "purchase.noWatermarkAvailable": "You can save without a watermark",
+        "purchase.sevenDay.title": "7-Day Pass",
+        "purchase.sevenDay.subtitle": "No watermark for 7 days",
+        "purchase.sevenDay.detail": "",
+        "purchase.lifetime.title": "Lifetime Pass",
+        "purchase.lifetime.subtitle": "No watermark forever",
+        "purchase.lifetime.detail": "",
+        "purchase.purchase": "Purchase",
+        "purchase.active": "Active",
+        "purchase.purchased": "Purchased",
+        "purchase.restore": "Restore",
+        "purchase.completed": "Purchase completed",
+        "purchase.failed": "Purchase failed",
+        "purchase.productsFailed": "Products could not be loaded",
+        "purchase.tryAgainLater": "Please try again later",
+        "purchase.unavailable": "—",
+        "purchase.restored": "Purchases restored",
+        "purchase.restoreFailed": "Could not restore purchases",
+        "purchase.comingSoon": "Checking product information"
+    ]
+
+    #if DEBUG
+    private static let debugJa: [String: String] = [
+        "settings.debug": "DEBUG",
+        "settings.resetFree": "ウォーターマークなし無料枠をリセット",
+        "settings.resetFreeDescription": "本日の無料分を未使用状態に戻します。Releaseビルドには表示されません。",
+        "settings.resetFreeDone": "ウォーターマークなし無料枠をリセットしました",
+        "settings.currentRemaining": "現在: 本日あと%d回",
+        "settings.currentUsed": "現在: 本日分を使用済み",
+        "settings.debugEntitlement": "有料状態を切り替え",
+        "settings.debugDraftLimit": "下書き上限",
+        "debug.real": "実状態を使う",
+        "debug.free": "無料",
+        "debug.freeUsedToday": "無料・本日分使用済み",
+        "debug.sevenDayActive": "7日間パス有効",
+        "debug.sevenDayExpired": "7日間パス期限切れ",
+        "debug.lifetime": "永久パス有効",
+        "debug.draftLimit.real": "実上限を使う",
+        "debug.draftLimit.one": "1件",
+        "debug.draftLimit.two": "2件",
+        "debug.draftLimit.five": "5件",
+        "debug.draftLimit.ten": "10件",
+        "debug.draftLimit.hundred": "100件"
+    ]
+
+    private static let debugEn: [String: String] = [
+        "settings.debug": "DEBUG",
+        "settings.resetFree": "Reset watermark-free save",
+        "settings.resetFreeDescription": "Resets today's free save. This is hidden in Release builds.",
+        "settings.resetFreeDone": "Watermark-free save reset",
+        "settings.currentRemaining": "Current: %d remaining today",
+        "settings.currentUsed": "Current: used today",
+        "settings.debugEntitlement": "Debug entitlement",
+        "settings.debugDraftLimit": "Draft limit",
+        "debug.real": "Use real state",
+        "debug.free": "Free",
+        "debug.freeUsedToday": "Free, used today",
+        "debug.sevenDayActive": "7-Day Pass active",
+        "debug.sevenDayExpired": "7-Day Pass expired",
+        "debug.lifetime": "Lifetime Pass active",
+        "debug.draftLimit.real": "Use real limit",
+        "debug.draftLimit.one": "1",
+        "debug.draftLimit.two": "2",
+        "debug.draftLimit.five": "5",
+        "debug.draftLimit.ten": "10",
+        "debug.draftLimit.hundred": "100"
+    ]
+    #endif
+}

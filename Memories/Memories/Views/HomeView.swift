@@ -5,12 +5,19 @@ import UIKit
 struct HomeView: View {
     private let template = TemplateRepository.bundled.loadTemplates().templates.first ?? .previewPetLifelog
 
+    @EnvironmentObject private var appState: MemoriesAppState
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var editorRoute: EditorRoute?
     @State private var isLoadingPhoto = false
     @State private var photoErrorMessage: String?
+    @State private var showPurchase = false
+    @State private var showPhotoPicker = false
+    @State private var showDraftFullBeforeEdit = false
+    @State private var showDrafts = false
 
     var body: some View {
+        let photoButtonTitle = isLoadingPhoto ? appState.t("common.loading") : appState.t("home.choosePhoto")
+
         NavigationStack {
             ZStack {
                 MemoriesTheme.background.ignoresSafeArea()
@@ -22,32 +29,45 @@ struct HomeView: View {
 
                     MemoriesGlassPanel {
                         VStack(spacing: 14) {
-                            PhotosPicker(
-                                selection: $selectedPhotoItem,
-                                matching: .images,
-                                photoLibrary: .shared()
-                            ) {
+                            Button {
+                                startPhotoSelection()
+                            } label: {
                                 MemoriesPrimaryButtonLabel(
-                                    title: isLoadingPhoto ? "読み込み中..." : "写真を選ぶ",
+                                    title: photoButtonTitle,
                                     systemImage: "photo"
                                 )
                             }
+                            .buttonStyle(.plain)
+                            .photosPicker(
+                                isPresented: $showPhotoPicker,
+                                selection: $selectedPhotoItem,
+                                matching: .images,
+                                photoLibrary: .shared()
+                            )
                             .disabled(isLoadingPhoto)
 
                             NavigationLink {
                                 DraftsView()
                             } label: {
-                                HomeActionRow(title: "下書き", systemImage: "tray")
+                                HomeActionRow(title: appState.t("home.drafts"), systemImage: "tray")
                             }
 
                             NavigationLink {
                                 SettingsView()
                             } label: {
-                                HomeActionRow(title: "設定", systemImage: "gearshape")
+                                HomeActionRow(title: appState.t("home.settings"), systemImage: "gearshape")
                             }
                         }
                         .padding(18)
                     }
+
+                    Button {
+                        showPurchase = true
+                    } label: {
+                        PurchaseEntryButton()
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                     if let photoErrorMessage {
                         Text(photoErrorMessage)
@@ -62,14 +82,35 @@ struct HomeView: View {
                     Spacer()
                 }
                 .padding(24)
+                .frame(maxWidth: MemoriesLayoutMetrics.homeMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showDrafts) {
+                DraftsView()
+            }
             .navigationDestination(item: $editorRoute) { route in
                 EditorView(template: route.template, photoImage: route.photoImage)
             }
             .task(id: selectedPhotoItem) {
                 await loadSelectedPhoto()
+            }
+            .sheet(isPresented: $showPurchase) {
+                PurchaseView()
+            }
+            .alert(appState.t("drafts.full.title"), isPresented: $showDraftFullBeforeEdit) {
+                Button(appState.t("drafts.manage")) {
+                    showDrafts = true
+                }
+
+                Button(appState.t("editor.continue")) {
+                    showPhotoPicker = true
+                }
+
+                Button(appState.t("common.cancel"), role: .cancel) {}
+            } message: {
+                Text(appState.t("drafts.fullBeforeEdit.message"))
             }
         }
     }
@@ -89,10 +130,19 @@ struct HomeView: View {
                     .foregroundStyle(MemoriesTheme.textMain)
             }
 
-            Text("うちの子の今日を、おしゃれな1枚に")
+            Text(appState.t("home.tagline"))
                 .font(.headline.weight(.medium))
                 .foregroundStyle(MemoriesTheme.textSub)
                 .lineSpacing(3)
+        }
+    }
+
+    @MainActor
+    private func startPhotoSelection() {
+        if DraftRepository.shared.loadDrafts().count >= appState.draftLimit {
+            showDraftFullBeforeEdit = true
+        } else {
+            showPhotoPicker = true
         }
     }
 
@@ -114,14 +164,42 @@ struct HomeView: View {
                 let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
                 let image = UIImage(data: data)
             else {
-                photoErrorMessage = "写真を読み込めませんでした。別の写真でもう一度お試しください。"
+                photoErrorMessage = appState.t("home.photoLoadFailed")
                 return
             }
 
             editorRoute = EditorRoute(template: template, photoImage: image)
         } catch {
-            photoErrorMessage = "写真の読み込みに失敗しました。時間をおいてもう一度お試しください。"
+            photoErrorMessage = appState.t("home.photoLoadError")
         }
+    }
+}
+
+private struct PurchaseEntryButton: View {
+    @EnvironmentObject private var appState: MemoriesAppState
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "sparkles")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.accentDeep)
+
+            Text(appState.t("purchase.entry.title"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.accentDeep)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+                .layoutPriority(1)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 8)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
@@ -174,4 +252,5 @@ private struct HomeActionRow: View {
 
 #Preview {
     HomeView()
+        .environmentObject(MemoriesAppState())
 }

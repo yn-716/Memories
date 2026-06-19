@@ -6,6 +6,16 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		D9CF4B0A2FEA000000ECB6F7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D9CF3A702FE159CD00ECB6F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D9CF3A772FE159CD00ECB6F7;
+			remoteInfo = Memories;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		D9CF3A782FE159CD00ECB6F7 /* Memories.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memories.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D9CF3BEA2FE3A6C800ECB6F7 /* Memories.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Memories.storekit; path = StoreKit/Memories.storekit; sourceTree = "<group>"; };
@@ -112,16 +122,6 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXContainerItemProxy section */
-		D9CF4B0A2FEA000000ECB6F7 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = D9CF3A702FE159CD00ECB6F7 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D9CF3A772FE159CD00ECB6F7;
-			remoteInfo = Memories;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		D9CF3A702FE159CD00ECB6F7 /* Project object */ = {
@@ -354,7 +354,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -389,7 +389,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

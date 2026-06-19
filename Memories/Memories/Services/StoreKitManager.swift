@@ -262,7 +262,7 @@ final class StoreKitManager: ObservableObject {
     }
 
     private func sevenDayPassExpiry(for transaction: Transaction) -> Date {
-        Calendar.current.date(byAdding: .day, value: 7, to: transaction.purchaseDate) ?? transaction.purchaseDate
+        PurchaseEntitlementRules.sevenDayPassExpiry(from: transaction.purchaseDate)
     }
 
     private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {

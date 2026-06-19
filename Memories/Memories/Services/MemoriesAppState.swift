@@ -89,6 +89,14 @@ enum PurchaseProductID: String, CaseIterable {
     }
 }
 
+enum PurchaseEntitlementRules {
+    static let sevenDayPassDuration: TimeInterval = 7 * 24 * 60 * 60
+
+    static func sevenDayPassExpiry(from purchaseDate: Date) -> Date {
+        purchaseDate.addingTimeInterval(sevenDayPassDuration)
+    }
+}
+
 @MainActor
 final class MemoriesAppState: ObservableObject {
     @Published var appLanguage: AppLanguage {
@@ -163,7 +171,7 @@ final class MemoriesAppState: ObservableObject {
             return debugEntitlementOverride == .none ? entitlementState : .free
         case .sevenDayActive:
             return EntitlementState(
-                sevenDayPassExpiresAt: Calendar.current.date(byAdding: .day, value: 7, to: Date()),
+                sevenDayPassExpiresAt: PurchaseEntitlementRules.sevenDayPassExpiry(from: Date()),
                 hasLifetimePass: false,
                 lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
             )
@@ -204,8 +212,11 @@ final class MemoriesAppState: ObservableObject {
     }
 
     func grantSevenDayPass(from date: Date = Date()) {
+        let candidateExpiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: date)
+        let nextExpiry = max(entitlementState.sevenDayPassExpiresAt ?? .distantPast, candidateExpiry)
+
         entitlementState = EntitlementState(
-            sevenDayPassExpiresAt: Calendar.current.date(byAdding: .day, value: 7, to: date),
+            sevenDayPassExpiresAt: nextExpiry,
             hasLifetimePass: entitlementState.hasLifetimePass,
             lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
         )

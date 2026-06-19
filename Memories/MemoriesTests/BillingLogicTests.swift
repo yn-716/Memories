@@ -16,7 +16,7 @@ final class BillingLogicTests: XCTestCase {
     func testSevenDayPassExpiresSevenDaysAfterPurchaseAndHonorsBoundary() throws {
         let appState = MemoriesAppState(defaults: makeDefaults())
         let purchaseDate = Date(timeIntervalSince1970: 1_800_000_000)
-        let expectedExpiry = Calendar.current.date(byAdding: .day, value: 7, to: purchaseDate)
+        let expectedExpiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: purchaseDate)
 
         XCTAssertTrue(
             appState.applyPurchasedProduct(
@@ -26,10 +26,68 @@ final class BillingLogicTests: XCTestCase {
         )
 
         let actualExpiry = try XCTUnwrap(appState.entitlementState.sevenDayPassExpiresAt)
-        XCTAssertEqual(actualExpiry.timeIntervalSince1970, try XCTUnwrap(expectedExpiry).timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertEqual(actualExpiry.timeIntervalSince1970, expectedExpiry.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertTrue(appState.entitlementState.grantsUnlimitedWatermarkFreeOutput(on: actualExpiry.addingTimeInterval(-0.001)))
         XCTAssertFalse(appState.entitlementState.grantsUnlimitedWatermarkFreeOutput(on: actualExpiry))
         XCTAssertFalse(appState.entitlementState.grantsUnlimitedWatermarkFreeOutput(on: actualExpiry.addingTimeInterval(0.001)))
+    }
+
+    func testSevenDayPassExpiryUsesExactSecondsDuration() throws {
+        let purchaseDate = Date(timeIntervalSince1970: 1_800_000_000.25)
+        let expiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: purchaseDate)
+
+        XCTAssertEqual(
+            expiry.timeIntervalSince(purchaseDate),
+            PurchaseEntitlementRules.sevenDayPassDuration,
+            accuracy: 0.001
+        )
+    }
+
+    func testApplyingOlderSevenDayPassDoesNotShortenExistingExpiry() throws {
+        let appState = MemoriesAppState(defaults: makeDefaults())
+        let newerPurchaseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let olderPurchaseDate = newerPurchaseDate.addingTimeInterval(-2 * 24 * 60 * 60)
+
+        XCTAssertTrue(
+            appState.applyPurchasedProduct(
+                id: PurchaseProductID.sevenDayPass.rawValue,
+                purchaseDate: newerPurchaseDate
+            )
+        )
+        let originalExpiry = try XCTUnwrap(appState.entitlementState.sevenDayPassExpiresAt)
+
+        XCTAssertTrue(
+            appState.applyPurchasedProduct(
+                id: PurchaseProductID.sevenDayPass.rawValue,
+                purchaseDate: olderPurchaseDate
+            )
+        )
+        let actualExpiry = try XCTUnwrap(appState.entitlementState.sevenDayPassExpiresAt)
+
+        XCTAssertEqual(actualExpiry.timeIntervalSince1970, originalExpiry.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    func testApplyingNewerSevenDayPassExtendsExistingExpiry() throws {
+        let appState = MemoriesAppState(defaults: makeDefaults())
+        let olderPurchaseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let newerPurchaseDate = olderPurchaseDate.addingTimeInterval(3 * 24 * 60 * 60)
+
+        XCTAssertTrue(
+            appState.applyPurchasedProduct(
+                id: PurchaseProductID.sevenDayPass.rawValue,
+                purchaseDate: olderPurchaseDate
+            )
+        )
+        XCTAssertTrue(
+            appState.applyPurchasedProduct(
+                id: PurchaseProductID.sevenDayPass.rawValue,
+                purchaseDate: newerPurchaseDate
+            )
+        )
+
+        let actualExpiry = try XCTUnwrap(appState.entitlementState.sevenDayPassExpiresAt)
+        let expectedExpiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: newerPurchaseDate)
+        XCTAssertEqual(actualExpiry.timeIntervalSince1970, expectedExpiry.timeIntervalSince1970, accuracy: 0.001)
     }
 
     func testLifetimePassGrantsUnlimitedAccessEvenWhenSevenDayPassIsExpired() {
@@ -63,6 +121,36 @@ final class BillingLogicTests: XCTestCase {
         XCTAssertNil(appState.entitlementState.sevenDayPassExpiresAt)
         XCTAssertFalse(appState.entitlementState.hasLifetimePass)
         XCTAssertFalse(appState.entitlementState.grantsUnlimitedWatermarkFreeOutput(on: checkedAt))
+        XCTAssertEqual(
+            try XCTUnwrap(appState.entitlementState.lastTransactionCheckAt).timeIntervalSince1970,
+            checkedAt.timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
+    func testReplaceEntitlementStateUsesPassedStateExactly() throws {
+        let appState = MemoriesAppState(defaults: makeDefaults())
+        let purchaseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        let longerPurchaseDate = purchaseDate.addingTimeInterval(3 * 24 * 60 * 60)
+        let checkedAt = purchaseDate.addingTimeInterval(120)
+        let replacementExpiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: purchaseDate)
+
+        XCTAssertTrue(
+            appState.applyPurchasedProduct(
+                id: PurchaseProductID.sevenDayPass.rawValue,
+                purchaseDate: longerPurchaseDate
+            )
+        )
+
+        appState.replaceEntitlementState(
+            sevenDayPassExpiresAt: replacementExpiry,
+            hasLifetimePass: false,
+            checkedAt: checkedAt
+        )
+
+        let actualExpiry = try XCTUnwrap(appState.entitlementState.sevenDayPassExpiresAt)
+        XCTAssertEqual(actualExpiry.timeIntervalSince1970, replacementExpiry.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertFalse(appState.entitlementState.hasLifetimePass)
         XCTAssertEqual(
             try XCTUnwrap(appState.entitlementState.lastTransactionCheckAt).timeIntervalSince1970,
             checkedAt.timeIntervalSince1970,
@@ -105,7 +193,7 @@ final class BillingLogicTests: XCTestCase {
         let freeExportStore = DailyWatermarkFreeExportStore(defaults: defaults)
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let state = EntitlementState(
-            sevenDayPassExpiresAt: Calendar.current.date(byAdding: .day, value: 7, to: now),
+            sevenDayPassExpiresAt: PurchaseEntitlementRules.sevenDayPassExpiry(from: now),
             hasLifetimePass: false,
             lastTransactionCheckAt: nil
         )

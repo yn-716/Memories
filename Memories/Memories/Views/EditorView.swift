@@ -48,6 +48,7 @@ struct EditorView: View {
         _editState = State(initialValue: initialState)
         _lastPersistedEditState = State(initialValue: initialState)
         _currentDraftID = State(initialValue: draftID)
+        _selectedTab = State(initialValue: template.renderStyle.isRetroFilm ? .retroDate : .text)
     }
 
     var body: some View {
@@ -287,7 +288,8 @@ struct EditorView: View {
                     editState: editState,
                     photoImage: photoImage,
                     aspectRatio: photoAspectRatio,
-                    isPhotoAdjustmentActive: true,
+                    isPhotoAdjustmentActive: !template.renderStyle.isRetroFilm,
+                    watermarkMode: editorPreviewWatermarkMode,
                     onPhotoPlacementChanged: { placement in
                         editState.photoPlacement = placement
                     }
@@ -346,6 +348,10 @@ struct EditorView: View {
             positionTab
         case .photo:
             photoTab
+        case .retroDate:
+            retroDateTab
+        case .retroFilter:
+            retroFilterTab
         }
     }
 
@@ -485,6 +491,91 @@ struct EditorView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 15, style: .continuous)
                 .stroke(MemoriesTheme.border.opacity(0.74), lineWidth: 1)
+        }
+    }
+
+    private var retroDateTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(appState.t("editor.retroDateTime"), systemImage: "calendar")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textMain)
+
+            Text(appState.t("editor.retroDateHint"))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(MemoriesTheme.textSub)
+                .lineLimit(2)
+
+            HStack(spacing: 12) {
+                DatePicker(
+                    appState.t("editor.retroDateTime"),
+                    selection: retroSelectedDateBinding,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(MemoriesTheme.accentDeep)
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(appState.t("editor.retroStampPreview"))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textSub)
+
+                    Text(editState.retroDateStampText)
+                        .font(.system(.headline, design: .monospaced).weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                        .monospacedDigit()
+                }
+            }
+            .padding(12)
+            .background(MemoriesTheme.card.opacity(0.58))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(MemoriesTheme.border.opacity(0.68), lineWidth: 1)
+            }
+        }
+        .padding(12)
+        .background(MemoriesTheme.card.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.62), lineWidth: 1)
+        }
+    }
+
+    private var retroFilterTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(appState.t("editor.retroFilter"), systemImage: "slider.horizontal.3")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(MemoriesTheme.textMain)
+
+            Text(appState.t("editor.retroFilterHint"))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(MemoriesTheme.textSub)
+                .lineLimit(2)
+
+            HStack(spacing: 8) {
+                ForEach(RetroFilterType.allCases) { filterType in
+                    CompactPanelChip(
+                        title: filterType.displayName(language: appState.resolvedLanguage),
+                        isSelected: editState.retroFilterType == filterType
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.16)) {
+                            editState.retroFilterType = filterType
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(12)
+        .background(MemoriesTheme.card.opacity(0.52))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.62), lineWidth: 1)
         }
     }
 
@@ -720,8 +811,19 @@ struct EditorView: View {
         )
     }
 
+    private var retroSelectedDateBinding: Binding<Date> {
+        Binding(
+            get: { editState.selectedDate },
+            set: { editState.selectedDate = CardEditState.normalizedDate($0) }
+        )
+    }
+
     private var hasUnsavedChanges: Bool {
         editState != lastPersistedEditState
+    }
+
+    private var editorPreviewWatermarkMode: WatermarkMode {
+        appState.watermarkPolicy().snapshot.hasUnlimitedAccess ? .hidden : .visible
     }
 
     private var photoAspectRatio: CGFloat {
@@ -737,6 +839,10 @@ struct EditorView: View {
     }
 
     private var availableTabs: [EditorPanelTab] {
+        if template.renderStyle.isRetroFilm {
+            return [.retroDate, .retroFilter]
+        }
+
         if template.isTicketStyle {
             return [.text]
         }
@@ -745,6 +851,10 @@ struct EditorView: View {
     }
 
     private var availableTextTargets: [TextEditTarget] {
+        if template.renderStyle.isRetroFilm {
+            return []
+        }
+
         if template.isTicketStyle {
             return [.ticketTitle, .main, .location, .date]
         }
@@ -829,7 +939,7 @@ struct EditorView: View {
 
     private func normalizeEditorSelection() {
         if !availableTabs.contains(selectedTab) {
-            selectedTab = .text
+            selectedTab = availableTabs.first ?? .text
         }
 
         if !availableTextTargets.contains(selectedTextTarget) {
@@ -1271,6 +1381,8 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
     case appearance
     case position
     case photo
+    case retroDate
+    case retroFilter
 
     var id: Self { self }
 
@@ -1286,6 +1398,10 @@ private enum EditorPanelTab: CaseIterable, Identifiable {
             return MemoriesLocalization.text("editor.position", language: language)
         case .photo:
             return MemoriesLocalization.text("editor.photo", language: language)
+        case .retroDate:
+            return MemoriesLocalization.text("editor.retroDateTime", language: language)
+        case .retroFilter:
+            return MemoriesLocalization.text("editor.retroFilter", language: language)
         }
     }
 }

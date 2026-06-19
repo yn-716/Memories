@@ -7,6 +7,7 @@ struct TemplateCanvasPreview: View {
     let photoImage: UIImage?
     let aspectRatio: CGFloat
     let isPhotoAdjustmentActive: Bool
+    let watermarkMode: WatermarkMode
     let onPhotoPlacementChanged: ((PhotoPlacement) -> Void)?
 
     @State private var dragStartPlacement: PhotoPlacement?
@@ -18,6 +19,7 @@ struct TemplateCanvasPreview: View {
         photoImage: UIImage?,
         aspectRatio: CGFloat,
         isPhotoAdjustmentActive: Bool = false,
+        watermarkMode: WatermarkMode = .hidden,
         onPhotoPlacementChanged: ((PhotoPlacement) -> Void)? = nil
     ) {
         self.template = template
@@ -25,6 +27,7 @@ struct TemplateCanvasPreview: View {
         self.photoImage = photoImage
         self.aspectRatio = aspectRatio
         self.isPhotoAdjustmentActive = isPhotoAdjustmentActive
+        self.watermarkMode = watermarkMode
         self.onPhotoPlacementChanged = onPhotoPlacementChanged
     }
 
@@ -35,6 +38,8 @@ struct TemplateCanvasPreview: View {
             ZStack(alignment: .topLeading) {
                 if template.renderStyle.isTicket {
                     ticketPreview(size: size)
+                } else if template.renderStyle.isRetroFilm {
+                    retroFilmPreview(size: size)
                 } else {
                     simpleCardPreview(size: size)
                 }
@@ -54,10 +59,51 @@ struct TemplateCanvasPreview: View {
             overlayContent(size: size)
                 .padding(CardOverlayLayout.inset(for: size))
                 .frame(width: size.width, height: size.height, alignment: editState.selectedPosition.alignment)
+
+            watermarkOverlay(
+                size: size,
+                overlayPosition: editState.selectedPosition
+            )
         }
         .frame(width: size.width, height: size.height)
         .contentShape(Rectangle())
         .gesture(photoAdjustmentGesture(frameRect: frameRect))
+    }
+
+    @ViewBuilder
+    private func retroFilmPreview(size: CGSize) -> some View {
+        ZStack(alignment: .topLeading) {
+            if let photoImage,
+               let filteredImage = RetroFilmEffect.render(image: photoImage, size: size, filterType: editState.retroFilterType) {
+                Image(uiImage: filteredImage)
+                    .resizable()
+                    .frame(width: size.width, height: size.height)
+            } else {
+                LinearGradient(
+                    colors: [Color(hex: "#D7B98A"), Color(hex: "#7F6A52")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+
+            let stampImage = RetroDateStampRenderer.image(
+                text: editState.retroDateStampText,
+                filterType: editState.retroFilterType,
+                canvasSize: size
+            )
+
+            Image(uiImage: stampImage)
+                .resizable()
+                .frame(width: stampImage.size.width, height: stampImage.size.height)
+                .padding(RetroFilmLayout.stampInset(for: size))
+                .frame(width: size.width, height: size.height, alignment: .bottomTrailing)
+
+            watermarkOverlay(
+                size: size,
+                overlayPosition: .bottomRight
+            )
+        }
+        .frame(width: size.width, height: size.height)
     }
 
     @ViewBuilder
@@ -76,6 +122,12 @@ struct TemplateCanvasPreview: View {
 
                 ticketOverlayContent(layout: layout, size: size)
 
+                watermarkOverlay(
+                    size: size,
+                    overlayPosition: .bottomLeft,
+                    bounds: layout.photoFrame
+                )
+
                 Rectangle()
                     .fill(Color.clear)
                     .contentShape(Rectangle())
@@ -87,6 +139,77 @@ struct TemplateCanvasPreview: View {
         } else {
             simpleCardPreview(size: size)
         }
+    }
+
+    @ViewBuilder
+    private func watermarkOverlay(
+        size: CGSize,
+        overlayPosition: OverlayPosition,
+        bounds: CGRect? = nil
+    ) -> some View {
+        if watermarkMode == .visible {
+            let drawingBounds = bounds ?? CGRect(origin: .zero, size: size)
+            let base = min(drawingBounds.width, drawingBounds.height)
+            let watermarkPosition = WatermarkRenderer.oppositeWatermarkPosition(for: overlayPosition)
+            let pillHeight = max(18, base * 0.068)
+            let iconSide = pillHeight * 0.62
+            let fontSize = pillHeight * 0.36
+            let font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+            let horizontalPadding = pillHeight * 0.28
+            let spacing = pillHeight * 0.18
+            let maxWidth = max(56, drawingBounds.width - max(8, base * 0.056) * 2)
+            let textMaxWidth = max(24, maxWidth - horizontalPadding * 2 - iconSide - spacing)
+            let textWidth = min(
+                textMaxWidth,
+                NSString(string: WatermarkRenderer.brandName).size(withAttributes: [.font: font]).width
+            )
+            let pillWidth = min(maxWidth, horizontalPadding * 2 + iconSide + spacing + textWidth)
+            let inset = max(8, base * 0.056)
+            let origin = watermarkOrigin(
+                for: watermarkPosition,
+                watermarkSize: CGSize(width: pillWidth, height: pillHeight),
+                inset: inset,
+                bounds: drawingBounds
+            )
+
+            HStack(spacing: spacing) {
+                Image("watermark_app_icon")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: iconSide, height: iconSide)
+                    .clipShape(RoundedRectangle(cornerRadius: iconSide * 0.18, style: .continuous))
+                    .opacity(0.62)
+
+                Text(WatermarkRenderer.brandName)
+                    .font(.system(size: fontSize, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+                    .frame(width: textWidth, alignment: .leading)
+            }
+            .padding(.horizontal, horizontalPadding)
+            .frame(width: pillWidth, height: pillHeight, alignment: .leading)
+            .background(.black.opacity(0.28))
+            .clipShape(RoundedRectangle(cornerRadius: pillHeight * 0.34, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: pillHeight * 0.34, style: .continuous)
+                    .stroke(.white.opacity(0.2), lineWidth: max(0.5, base * 0.001))
+            }
+            .offset(x: origin.x, y: origin.y)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func watermarkOrigin(
+        for position: OverlayPosition,
+        watermarkSize: CGSize,
+        inset: CGFloat,
+        bounds: CGRect
+    ) -> CGPoint {
+        CGPoint(
+            x: position.isTrailing ? bounds.maxX - inset - watermarkSize.width : bounds.minX + inset,
+            y: position.isBottom ? bounds.maxY - inset - watermarkSize.height : bounds.minY + inset
+        )
     }
 
     @ViewBuilder

@@ -13,7 +13,7 @@ struct TicketCardLayout {
 
     static func layout(for renderStyle: TemplateRenderStyle, canvasSize: CGSize) -> TicketCardLayout? {
         switch renderStyle {
-        case .simpleCard:
+        case .simpleCard, .retroFilm:
             return nil
         case .ticketPortrait:
             return TicketCardLayout(
@@ -42,7 +42,7 @@ struct TicketCardLayout {
 
     static func aspectRatio(for renderStyle: TemplateRenderStyle) -> CGFloat? {
         switch renderStyle {
-        case .simpleCard:
+        case .simpleCard, .retroFilm:
             return nil
         case .ticketPortrait:
             return 4 / 5
@@ -54,7 +54,7 @@ struct TicketCardLayout {
     static func iconSize(for renderStyle: TemplateRenderStyle, canvasSize: CGSize) -> CGFloat {
         let base = min(canvasSize.width, canvasSize.height)
         switch renderStyle {
-        case .simpleCard:
+        case .simpleCard, .retroFilm:
             return base * 0.07
         case .ticketPortrait:
             return base * 0.058

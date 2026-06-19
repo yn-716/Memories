@@ -49,7 +49,8 @@ struct BundleTemplateSource: TemplateSource {
         templateResourceNames: [String] = [
             "pet_lifelog_clean_001",
             "ticket_memory_portrait_001",
-            "ticket_memory_landscape_001"
+            "ticket_memory_landscape_001",
+            "retro_film_001"
         ],
         searchSubdirectories: [String?] = ["Templates", "Resources/Templates", nil]
     ) {

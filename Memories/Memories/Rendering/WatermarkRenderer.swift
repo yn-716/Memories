@@ -16,7 +16,7 @@ struct WatermarkPolicy: Hashable {
 }
 
 struct WatermarkRenderer {
-    private static let brandName = "Memories Pet Life"
+    static let brandName = "Memories Pet Life"
 
     func draw(
         mode: WatermarkMode,

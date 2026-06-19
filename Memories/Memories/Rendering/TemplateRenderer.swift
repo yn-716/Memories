@@ -1,3 +1,4 @@
+import CoreImage
 import UIKit
 
 struct TemplateRenderConfiguration {
@@ -34,6 +35,11 @@ final class TemplateRenderer {
         let renderer = UIGraphicsImageRenderer(size: configuration.outputSize, format: format)
         return renderer.image { context in
             let cgContext = context.cgContext
+            if configuration.template.renderStyle.isRetroFilm {
+                drawRetroFilm(configuration: configuration, in: cgContext)
+                return
+            }
+
             if configuration.template.renderStyle.isTicket {
                 drawTicketCard(configuration: configuration, in: cgContext)
                 return
@@ -59,6 +65,77 @@ final class TemplateRenderer {
                 size: configuration.outputSize
             )
         }
+    }
+
+    private func drawRetroFilm(configuration: TemplateRenderConfiguration, in context: CGContext) {
+        let size = configuration.outputSize
+        let canvasRect = CGRect(origin: .zero, size: size)
+
+        UIGraphicsPushContext(context)
+        if let image = configuration.photoImage,
+           let filteredImage = RetroFilmEffect.render(
+                image: image,
+                size: size,
+                filterType: configuration.editState.retroFilterType
+           ) {
+            filteredImage.draw(in: canvasRect)
+        } else {
+            drawRetroPlaceholder(in: canvasRect)
+        }
+        drawRetroDateStamp(
+            configuration.editState.retroDateStampText,
+            filterType: configuration.editState.retroFilterType,
+            canvasSize: size
+        )
+        UIGraphicsPopContext()
+
+        WatermarkRenderer().draw(
+            mode: configuration.watermarkMode,
+            overlayPosition: .bottomRight,
+            in: context,
+            size: size
+        )
+    }
+
+    private func drawRetroPlaceholder(in rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return
+        }
+
+        let colors = [
+            UIColor(red: 0.84, green: 0.72, blue: 0.54, alpha: 1).cgColor,
+            UIColor(red: 0.50, green: 0.42, blue: 0.32, alpha: 1).cgColor
+        ]
+        let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: colors as CFArray,
+            locations: [0, 1]
+        )
+        if let gradient {
+            context.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: rect.minX, y: rect.minY),
+                end: CGPoint(x: rect.maxX, y: rect.maxY),
+                options: []
+            )
+        }
+    }
+
+    private func drawRetroDateStamp(_ text: String, filterType: RetroFilterType, canvasSize: CGSize) {
+        let inset = RetroFilmLayout.stampInset(for: canvasSize)
+        let stampImage = RetroDateStampRenderer.image(
+            text: text,
+            filterType: filterType,
+            canvasSize: canvasSize
+        )
+        let measured = stampImage.size
+        let rect = CGRect(
+            x: canvasSize.width - inset - measured.width,
+            y: canvasSize.height - inset - measured.height,
+            width: measured.width,
+            height: measured.height
+        )
+        stampImage.draw(in: rect)
     }
 
     private func drawPhotoLayer(
@@ -609,6 +686,474 @@ final class TemplateRenderer {
 }
 
 private typealias RenderTextRole = CardOverlayTextRole
+
+struct RetroFilmLayout {
+    static func stampColor(for filterType: RetroFilterType) -> UIColor {
+        switch filterType {
+        case .sepia, .nostalgic:
+            return UIColor(red: 1.0, green: 0.416, blue: 0.102, alpha: 0.96)
+        case .monochrome:
+            return UIColor(red: 0.957, green: 0.945, blue: 0.910, alpha: 0.96)
+        }
+    }
+
+    static func stampBleedColor(for filterType: RetroFilterType) -> UIColor {
+        switch filterType {
+        case .sepia, .nostalgic:
+            return UIColor(red: 1.0, green: 0.416, blue: 0.102, alpha: 0.25)
+        case .monochrome:
+            return UIColor(red: 0.957, green: 0.945, blue: 0.910, alpha: 0.24)
+        }
+    }
+
+    static func stampShadowColor(for filterType: RetroFilterType) -> UIColor {
+        switch filterType {
+        case .sepia, .nostalgic:
+            return UIColor(white: 0.0, alpha: 0.35)
+        case .monochrome:
+            return UIColor(white: 0.0, alpha: 0.55)
+        }
+    }
+
+    static func stampFontSize(for size: CGSize) -> CGFloat {
+        max(14, min(size.width, size.height) * 0.039)
+    }
+
+    static func stampInset(for size: CGSize) -> CGFloat {
+        max(18, min(size.width, size.height) * 0.052)
+    }
+
+    static func stampShadowRadius(for size: CGSize) -> CGFloat {
+        max(1.0, min(2.0, min(size.width, size.height) * 0.0022))
+    }
+
+    static func stampShadowOffset(for size: CGSize) -> CGFloat {
+        max(0.6, min(1.2, min(size.width, size.height) * 0.0014))
+    }
+
+    static func stampTracking(for size: CGSize) -> CGFloat {
+        max(1.8, min(3.0, stampFontSize(for: size) * 0.065))
+    }
+}
+
+enum RetroDateStampRenderer {
+    static func image(text: String, filterType: RetroFilterType, canvasSize: CGSize) -> UIImage {
+        let size = stampSize(text: text, canvasSize: canvasSize)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+
+        return UIGraphicsImageRenderer(size: size, format: format).image { rendererContext in
+            let context = rendererContext.cgContext
+            let padding = padding(for: canvasSize)
+            let origin = CGPoint(x: padding, y: padding)
+            let shadowOffset = RetroFilmLayout.stampShadowOffset(for: canvasSize)
+
+            context.saveGState()
+            context.setShadow(
+                offset: CGSize(width: shadowOffset * 0.7, height: shadowOffset * 0.7),
+                blur: RetroFilmLayout.stampShadowRadius(for: canvasSize),
+                color: RetroFilmLayout.stampShadowColor(for: filterType).cgColor
+            )
+            draw(
+                text: text,
+                at: CGPoint(x: origin.x + shadowOffset * 0.45, y: origin.y + shadowOffset * 0.45),
+                color: RetroFilmLayout.stampBleedColor(for: filterType),
+                canvasSize: canvasSize,
+                in: context
+            )
+            context.restoreGState()
+
+            context.saveGState()
+            context.setShadow(
+                offset: CGSize(width: shadowOffset, height: shadowOffset),
+                blur: RetroFilmLayout.stampShadowRadius(for: canvasSize),
+                color: RetroFilmLayout.stampShadowColor(for: filterType).cgColor
+            )
+            draw(
+                text: text,
+                at: origin,
+                color: RetroFilmLayout.stampColor(for: filterType),
+                canvasSize: canvasSize,
+                in: context
+            )
+            context.restoreGState()
+        }
+    }
+
+    static func stampSize(text: String, canvasSize: CGSize) -> CGSize {
+        let height = glyphHeight(for: canvasSize)
+        let tracking = RetroFilmLayout.stampTracking(for: canvasSize)
+        let width = text.reduce(CGFloat.zero) { partial, character in
+            partial + glyphWidth(for: character, height: height) + tracking
+        } - tracking
+        let padding = padding(for: canvasSize)
+        return CGSize(
+            width: max(1, width + padding * 2),
+            height: height + padding * 2
+        )
+    }
+
+    private static func draw(
+        text: String,
+        at origin: CGPoint,
+        color: UIColor,
+        canvasSize: CGSize,
+        in context: CGContext
+    ) {
+        let height = glyphHeight(for: canvasSize)
+        let tracking = RetroFilmLayout.stampTracking(for: canvasSize)
+        var cursorX = origin.x
+
+        context.setFillColor(color.cgColor)
+
+        for character in text {
+            let width = glyphWidth(for: character, height: height)
+            let rect = CGRect(x: cursorX, y: origin.y, width: width, height: height)
+            draw(character: character, in: rect, context: context)
+            cursorX += width + tracking
+        }
+    }
+
+    private static func draw(character: Character, in rect: CGRect, context: CGContext) {
+        if let segments = segments(for: character) {
+            for segment in segments {
+                context.addPath(segment.path(in: rect))
+                context.fillPath()
+            }
+            return
+        }
+
+        if character == "'" {
+            let tick = CGRect(
+                x: rect.midX - rect.width * 0.03,
+                y: rect.minY + rect.height * 0.06,
+                width: max(1, rect.width * 0.22),
+                height: rect.height * 0.24
+            )
+            context.addPath(apostrophePath(in: tick))
+            context.fillPath()
+        }
+    }
+
+    private static func segments(for character: Character) -> [Segment]? {
+        switch character {
+        case "0":
+            return [.top, .upperLeft, .upperRight, .lowerLeft, .lowerRight, .bottom]
+        case "1":
+            return [.upperRight, .lowerRight]
+        case "2":
+            return [.top, .upperRight, .middle, .lowerLeft, .bottom]
+        case "3":
+            return [.top, .upperRight, .middle, .lowerRight, .bottom]
+        case "4":
+            return [.upperLeft, .upperRight, .middle, .lowerRight]
+        case "5":
+            return [.top, .upperLeft, .middle, .lowerRight, .bottom]
+        case "6":
+            return [.top, .upperLeft, .middle, .lowerLeft, .lowerRight, .bottom]
+        case "7":
+            return [.top, .upperRight, .lowerRight]
+        case "8":
+            return [.top, .upperLeft, .upperRight, .middle, .lowerLeft, .lowerRight, .bottom]
+        case "9":
+            return [.top, .upperLeft, .upperRight, .middle, .lowerRight, .bottom]
+        default:
+            return nil
+        }
+    }
+
+    private static func glyphHeight(for canvasSize: CGSize) -> CGFloat {
+        RetroFilmLayout.stampFontSize(for: canvasSize) * 1.02
+    }
+
+    private static func glyphWidth(for character: Character, height: CGFloat) -> CGFloat {
+        switch character {
+        case " ":
+            return height * 0.33
+        case "'":
+            return height * 0.20
+        default:
+            return height * 0.46
+        }
+    }
+
+    private static func padding(for canvasSize: CGSize) -> CGFloat {
+        max(2.0, RetroFilmLayout.stampShadowRadius(for: canvasSize) * 2.4)
+    }
+
+    private static func apostrophePath(in rect: CGRect) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.36, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.32, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+
+    private enum Segment {
+        case top
+        case upperLeft
+        case upperRight
+        case middle
+        case lowerLeft
+        case lowerRight
+        case bottom
+
+        func path(in rect: CGRect) -> CGPath {
+            let thickness = max(1.4, rect.height * 0.13)
+            let shortThickness = max(1.2, rect.height * 0.105)
+            let chamfer = thickness * 0.42
+            switch self {
+            case .top:
+                return horizontalSegmentPath(
+                    fromX: rect.minX + rect.width * 0.26,
+                    toX: rect.minX + rect.width * 0.76,
+                    centerY: rect.minY + rect.height * 0.11,
+                    thickness: thickness,
+                    chamfer: chamfer
+                )
+            case .upperLeft:
+                return verticalSegmentPath(
+                    centerX: rect.minX + rect.width * 0.18,
+                    fromY: rect.minY + rect.height * 0.17,
+                    toY: rect.minY + rect.height * 0.44,
+                    thickness: shortThickness,
+                    chamfer: chamfer
+                )
+            case .upperRight:
+                return verticalSegmentPath(
+                    centerX: rect.minX + rect.width * 0.84,
+                    fromY: rect.minY + rect.height * 0.17,
+                    toY: rect.minY + rect.height * 0.44,
+                    thickness: shortThickness,
+                    chamfer: chamfer
+                )
+            case .middle:
+                return horizontalSegmentPath(
+                    fromX: rect.minX + rect.width * 0.24,
+                    toX: rect.minX + rect.width * 0.74,
+                    centerY: rect.minY + rect.height * 0.50,
+                    thickness: thickness,
+                    chamfer: chamfer
+                )
+            case .lowerLeft:
+                return verticalSegmentPath(
+                    centerX: rect.minX + rect.width * 0.18,
+                    fromY: rect.minY + rect.height * 0.56,
+                    toY: rect.minY + rect.height * 0.83,
+                    thickness: shortThickness,
+                    chamfer: chamfer
+                )
+            case .lowerRight:
+                return verticalSegmentPath(
+                    centerX: rect.minX + rect.width * 0.84,
+                    fromY: rect.minY + rect.height * 0.56,
+                    toY: rect.minY + rect.height * 0.83,
+                    thickness: shortThickness,
+                    chamfer: chamfer
+                )
+            case .bottom:
+                return horizontalSegmentPath(
+                    fromX: rect.minX + rect.width * 0.24,
+                    toX: rect.minX + rect.width * 0.74,
+                    centerY: rect.minY + rect.height * 0.89,
+                    thickness: thickness,
+                    chamfer: chamfer
+                )
+            }
+        }
+
+        private func horizontalSegmentPath(
+            fromX: CGFloat,
+            toX: CGFloat,
+            centerY: CGFloat,
+            thickness: CGFloat,
+            chamfer: CGFloat
+        ) -> CGPath {
+            let half = thickness / 2
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: fromX + chamfer, y: centerY - half))
+            path.addLine(to: CGPoint(x: toX - chamfer, y: centerY - half))
+            path.addLine(to: CGPoint(x: toX, y: centerY))
+            path.addLine(to: CGPoint(x: toX - chamfer, y: centerY + half))
+            path.addLine(to: CGPoint(x: fromX + chamfer, y: centerY + half))
+            path.addLine(to: CGPoint(x: fromX, y: centerY))
+            path.closeSubpath()
+            return path
+        }
+
+        private func verticalSegmentPath(
+            centerX: CGFloat,
+            fromY: CGFloat,
+            toY: CGFloat,
+            thickness: CGFloat,
+            chamfer: CGFloat
+        ) -> CGPath {
+            let half = thickness / 2
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: centerX, y: fromY))
+            path.addLine(to: CGPoint(x: centerX + half, y: fromY + chamfer))
+            path.addLine(to: CGPoint(x: centerX + half, y: toY - chamfer))
+            path.addLine(to: CGPoint(x: centerX, y: toY))
+            path.addLine(to: CGPoint(x: centerX - half, y: toY - chamfer))
+            path.addLine(to: CGPoint(x: centerX - half, y: fromY + chamfer))
+            path.closeSubpath()
+            return path
+        }
+    }
+}
+
+enum RetroFilmEffect {
+    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    static func render(image: UIImage, size: CGSize, filterType: RetroFilterType) -> UIImage? {
+        guard size.width > 0, size.height > 0 else {
+            return nil
+        }
+
+        let normalized = normalizedImage(image, size: size)
+        guard let input = CIImage(image: normalized) else {
+            return normalized
+        }
+
+        let extent = input.extent
+        let output: CIImage
+        switch filterType {
+        case .sepia:
+            output = sepiaImage(input).cropped(to: extent)
+        case .nostalgic:
+            output = nostalgicImage(input).cropped(to: extent)
+        case .monochrome:
+            output = monochromeImage(input).cropped(to: extent)
+        }
+
+        guard let cgImage = ciContext.createCGImage(output, from: extent) else {
+            return normalized
+        }
+        return UIImage(cgImage: cgImage)
+    }
+
+    private static func normalizedImage(_ image: UIImage, size: CGSize) -> UIImage {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.black.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            image.draw(in: aspectFitRect(imageSize: image.size, targetSize: size))
+        }
+    }
+
+    private static func sepiaImage(_ image: CIImage) -> CIImage {
+        let sepia = CIFilter(name: "CISepiaTone")
+        sepia?.setValue(image, forKey: kCIInputImageKey)
+        sepia?.setValue(0.70, forKey: kCIInputIntensityKey)
+        return colorControlled(
+            sepia?.outputImage ?? image,
+            saturation: 0.90,
+            contrast: 0.95,
+            brightness: 0.0
+        )
+    }
+
+    private static func nostalgicImage(_ image: CIImage) -> CIImage {
+        let controlled = colorControlled(
+            image,
+            saturation: 0.82,
+            contrast: 0.90,
+            brightness: 0.012
+        )
+        let curved = toneCurvedNostalgic(controlled)
+        let warmed = subtlyWarmed(curved)
+        return beigeSoftLightOverlay(warmed, opacity: 0.06)
+    }
+
+    private static func monochromeImage(_ image: CIImage) -> CIImage {
+        let mono = CIFilter(name: "CIPhotoEffectMono")
+        mono?.setValue(image, forKey: kCIInputImageKey)
+        return colorControlled(
+            mono?.outputImage ?? image,
+            saturation: 1.0,
+            contrast: 0.99,
+            brightness: 0.006
+        )
+    }
+
+    private static func colorControlled(
+        _ image: CIImage,
+        saturation: CGFloat,
+        contrast: CGFloat,
+        brightness: CGFloat
+    ) -> CIImage {
+        let filter = CIFilter(name: "CIColorControls")
+        filter?.setValue(image, forKey: kCIInputImageKey)
+        filter?.setValue(saturation, forKey: kCIInputSaturationKey)
+        filter?.setValue(contrast, forKey: kCIInputContrastKey)
+        filter?.setValue(brightness, forKey: kCIInputBrightnessKey)
+        return filter?.outputImage ?? image
+    }
+
+    private static func toneCurvedNostalgic(_ image: CIImage) -> CIImage {
+        let filter = CIFilter(name: "CIToneCurve")
+        filter?.setValue(image, forKey: kCIInputImageKey)
+        filter?.setValue(CIVector(x: 0.00, y: 0.07), forKey: "inputPoint0")
+        filter?.setValue(CIVector(x: 0.25, y: 0.23), forKey: "inputPoint1")
+        filter?.setValue(CIVector(x: 0.50, y: 0.50), forKey: "inputPoint2")
+        filter?.setValue(CIVector(x: 0.78, y: 0.74), forKey: "inputPoint3")
+        filter?.setValue(CIVector(x: 1.00, y: 0.93), forKey: "inputPoint4")
+        return filter?.outputImage ?? image
+    }
+
+    private static func subtlyWarmed(_ image: CIImage) -> CIImage {
+        let filter = CIFilter(name: "CIColorMatrix")
+        filter?.setValue(image, forKey: kCIInputImageKey)
+        filter?.setValue(CIVector(x: 1.020, y: 0.010, z: 0.000, w: 0), forKey: "inputRVector")
+        filter?.setValue(CIVector(x: 0.010, y: 1.012, z: 0.000, w: 0), forKey: "inputGVector")
+        filter?.setValue(CIVector(x: -0.010, y: -0.006, z: 0.945, w: 0), forKey: "inputBVector")
+        filter?.setValue(CIVector(x: 0.006, y: 0.004, z: -0.002, w: 0), forKey: "inputBiasVector")
+        return filter?.outputImage ?? image
+    }
+
+    private static func beigeSoftLightOverlay(_ image: CIImage, opacity: CGFloat) -> CIImage {
+        guard opacity > 0,
+              let overlay = constantImage(
+                color: CIColor(red: 0.96, green: 0.86, blue: 0.68, alpha: opacity),
+                extent: image.extent
+              )
+        else {
+            return image
+        }
+
+        let blend = CIFilter(name: "CISoftLightBlendMode")
+        blend?.setValue(overlay, forKey: kCIInputImageKey)
+        blend?.setValue(image, forKey: kCIInputBackgroundImageKey)
+        return blend?.outputImage?.cropped(to: image.extent) ?? image
+    }
+
+    private static func constantImage(color: CIColor, extent: CGRect) -> CIImage? {
+        let filter = CIFilter(name: "CIConstantColorGenerator")
+        filter?.setValue(color, forKey: kCIInputColorKey)
+        return filter?.outputImage?.cropped(to: extent)
+    }
+
+    private static func aspectFitRect(imageSize: CGSize, targetSize: CGSize) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else {
+            return CGRect(origin: .zero, size: targetSize)
+        }
+
+        let scale = min(targetSize.width / imageSize.width, targetSize.height / imageSize.height)
+        let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return CGRect(
+            x: (targetSize.width - drawSize.width) / 2,
+            y: (targetSize.height - drawSize.height) / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
+    }
+}
 
 private extension String {
     var trimmedForRenderer: String {

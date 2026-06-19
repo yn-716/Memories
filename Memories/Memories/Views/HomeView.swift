@@ -210,6 +210,20 @@ struct HomeView: View {
             date: metadata.capturedAt ?? Date()
         )
 
+        if template.renderStyle.isRetroFilm {
+            state.visibilitySettings = VisibilitySettings(
+                showThemeIcon: false,
+                showLocation: false,
+                showDate: true,
+                showWeather: false,
+                showMainText: false,
+                showSubText: false
+            )
+            state.selectedWeather = .none
+            state.retroFilterType = .sepia
+            return state
+        }
+
         if let locationText = metadata.locationText?.trimmingCharacters(in: .whitespacesAndNewlines), !locationText.isEmpty {
             state.locationText = String(locationText.prefix(30))
             state.visibilitySettings.showLocation = true
@@ -228,6 +242,8 @@ struct HomeView: View {
                 ?? simpleTemplate
         case .simpleCard:
             return simpleTemplate
+        case .retroFilm:
+            return templates.first(where: { $0.renderStyle == .retroFilm }) ?? simpleTemplate
         }
     }
 
@@ -239,6 +255,7 @@ struct HomeView: View {
 private enum CardCreationStyle: CaseIterable, Identifiable {
     case ticketFrame
     case simpleCard
+    case retroFilm
 
     var id: Self { self }
 
@@ -248,6 +265,8 @@ private enum CardCreationStyle: CaseIterable, Identifiable {
             return MemoriesLocalization.text("style.ticketFrame", language: language)
         case .simpleCard:
             return MemoriesLocalization.text("style.simpleCard", language: language)
+        case .retroFilm:
+            return MemoriesLocalization.text("style.retroFilm", language: language)
         }
     }
 
@@ -257,6 +276,8 @@ private enum CardCreationStyle: CaseIterable, Identifiable {
             return MemoriesLocalization.text("style.ticketFrameDescription", language: language)
         case .simpleCard:
             return MemoriesLocalization.text("style.simpleCardDescription", language: language)
+        case .retroFilm:
+            return MemoriesLocalization.text("style.retroFilmDescription", language: language)
         }
     }
 
@@ -266,6 +287,8 @@ private enum CardCreationStyle: CaseIterable, Identifiable {
             return "ticket"
         case .simpleCard:
             return "photo.on.rectangle"
+        case .retroFilm:
+            return "film"
         }
     }
 }

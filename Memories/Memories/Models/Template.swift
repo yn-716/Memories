@@ -73,7 +73,36 @@ struct Template: Codable, Hashable, Identifiable {
     }
 
     var previewEditState: CardEditState {
-        CardEditState(
+        if renderStyle.isRetroFilm {
+            return CardEditState(
+                selectedThemeIcon: .walk,
+                selectedWeather: .none,
+                locationText: "",
+                dateMode: .single,
+                selectedDate: CardEditState.date(year: 2026, month: 6, day: 19),
+                startDate: CardEditState.date(year: 2026, month: 6, day: 19),
+                endDate: CardEditState.date(year: 2026, month: 6, day: 19),
+                customDateText: "",
+                mainText: "",
+                subText: "",
+                ticketTitle: "",
+                selectedPosition: .bottomRight,
+                selectedFontRole: overlayStyle.defaultFontRole,
+                selectedTextColor: overlayStyle.defaultTextColor,
+                visibilitySettings: VisibilitySettings(
+                    showThemeIcon: false,
+                    showLocation: false,
+                    showDate: true,
+                    showWeather: false,
+                    showMainText: false,
+                    showSubText: false
+                ),
+                photoPlacement: .default,
+                retroFilterType: .sepia
+            )
+        }
+
+        return CardEditState(
             selectedThemeIcon: .walk,
             selectedWeather: .sunny,
             locationText: "Park",
@@ -98,14 +127,19 @@ enum TemplateRenderStyle: String, Codable, Hashable {
     case simpleCard
     case ticketPortrait
     case ticketLandscape
+    case retroFilm
 
     var isTicket: Bool {
-        self != .simpleCard
+        self == .ticketPortrait || self == .ticketLandscape
+    }
+
+    var isRetroFilm: Bool {
+        self == .retroFilm
     }
 
     var ticketFrameAssetName: String? {
         switch self {
-        case .simpleCard:
+        case .simpleCard, .retroFilm:
             return nil
         case .ticketPortrait:
             return "ticket_frame_portrait"
@@ -116,7 +150,7 @@ enum TemplateRenderStyle: String, Codable, Hashable {
 
     var outputSize: CGSize? {
         switch self {
-        case .simpleCard:
+        case .simpleCard, .retroFilm:
             return nil
         case .ticketPortrait:
             return CGSize(width: 1600, height: 2000)
@@ -196,6 +230,7 @@ struct CardEditState: Codable, Hashable {
     var selectedTextColor: TextColorOption
     var visibilitySettings: VisibilitySettings
     var photoPlacement: PhotoPlacement
+    var retroFilterType: RetroFilterType
 
     init(
         selectedThemeIcon: ThemeIconType,
@@ -213,7 +248,8 @@ struct CardEditState: Codable, Hashable {
         selectedFontRole: FontRole,
         selectedTextColor: TextColorOption,
         visibilitySettings: VisibilitySettings,
-        photoPlacement: PhotoPlacement = .default
+        photoPlacement: PhotoPlacement = .default,
+        retroFilterType: RetroFilterType = .sepia
     ) {
         self.selectedThemeIcon = selectedThemeIcon
         self.selectedWeather = selectedWeather
@@ -231,6 +267,7 @@ struct CardEditState: Codable, Hashable {
         self.selectedTextColor = selectedTextColor
         self.visibilitySettings = visibilitySettings
         self.photoPlacement = photoPlacement
+        self.retroFilterType = retroFilterType
     }
 
     enum CodingKeys: String, CodingKey {
@@ -250,10 +287,16 @@ struct CardEditState: Codable, Hashable {
         case selectedTextColor
         case visibilitySettings
         case photoPlacement
+        case retroFilterType
+    }
+
+    private enum LegacyCodingKeys: String, CodingKey {
+        case retroFilterStrength
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let legacyContainer = try decoder.container(keyedBy: LegacyCodingKeys.self)
         selectedThemeIcon = try container.decodeIfPresent(ThemeIconType.self, forKey: .selectedThemeIcon) ?? .walk
         selectedWeather = try container.decodeIfPresent(WeatherType.self, forKey: .selectedWeather) ?? .none
         locationText = try container.decodeIfPresent(String.self, forKey: .locationText) ?? ""
@@ -270,6 +313,9 @@ struct CardEditState: Codable, Hashable {
         selectedTextColor = try container.decodeIfPresent(TextColorOption.self, forKey: .selectedTextColor) ?? .white
         visibilitySettings = try container.decodeIfPresent(VisibilitySettings.self, forKey: .visibilitySettings) ?? .newCardDefault
         photoPlacement = try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default
+        retroFilterType = try container.decodeIfPresent(RetroFilterType.self, forKey: .retroFilterType)
+            ?? (try legacyContainer.decodeIfPresent(LegacyRetroFilterStrength.self, forKey: .retroFilterStrength))?.fallbackFilterType
+            ?? .sepia
     }
 
     var dateText: String {
@@ -285,6 +331,10 @@ struct CardEditState: Codable, Hashable {
         case .custom:
             return customDateText
         }
+    }
+
+    var retroDateStampText: String {
+        Self.retroDateFormatter.string(from: selectedDate)
     }
 
     static func newCard(
@@ -337,6 +387,43 @@ struct CardEditState: Codable, Hashable {
         formatter.dateFormat = "yyyy.MM.dd"
         return formatter
     }()
+
+    private static let retroDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MM dd ''yy"
+        return formatter
+    }()
+}
+
+enum RetroFilterType: String, Codable, CaseIterable, Hashable, Identifiable {
+    case sepia
+    case nostalgic
+    case monochrome
+
+    var id: String { rawValue }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch self {
+        case .sepia:
+            return MemoriesLocalization.text("retro.sepia", language: language)
+        case .nostalgic:
+            return MemoriesLocalization.text("retro.nostalgic", language: language)
+        case .monochrome:
+            return MemoriesLocalization.text("retro.monochrome", language: language)
+        }
+    }
+}
+
+private enum LegacyRetroFilterStrength: String, Codable {
+    case light
+    case medium
+    case strong
+
+    var fallbackFilterType: RetroFilterType {
+        .nostalgic
+    }
 }
 
 struct VisibilitySettings: Codable, Hashable {

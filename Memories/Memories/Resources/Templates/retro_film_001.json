@@ -1,0 +1,24 @@
+{
+  "id": "retro_film_001",
+  "name": "Retro Film",
+  "category": "petLifelog",
+  "renderStyle": "retroFilm",
+  "supportedAspectRatios": ["4:5", "1:1", "9:16", "3:2"],
+  "defaultLayout": "bottomRight",
+  "overlayStyle": {
+    "name": "Retro Film",
+    "defaultTextColor": "white",
+    "defaultFontRole": "clean",
+    "photoPlaceholderStartColor": "#D7B98A",
+    "photoPlaceholderEndColor": "#7F6A52",
+    "addsSoftShadow": false
+  },
+  "textFieldDefinitions": [
+    {
+      "id": "date",
+      "role": "date",
+      "defaultText": "06 19 '26",
+      "editable": true
+    }
+  ]
+}

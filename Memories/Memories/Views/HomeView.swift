@@ -305,11 +305,6 @@ private struct StyleSelectionView: View {
                 MemoriesTheme.background.ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(appState.t("style.chooseTitle"))
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(MemoriesTheme.textMain)
-                        .lineLimit(2)
-
                     VStack(spacing: 12) {
                         ForEach(CardCreationStyle.allCases) { style in
                             Button {

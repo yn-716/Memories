@@ -111,7 +111,7 @@ struct PetCalendarRenderer {
     func render(configuration: PetCalendarRenderConfiguration) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = true
+        format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: configuration.size, format: format)
 
         return renderer.image { rendererContext in
@@ -138,13 +138,16 @@ struct PetCalendarRenderer {
     }
 
     private func drawBackground(in context: CGContext, bounds: CGRect) {
+        context.clear(bounds)
+
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let colors = [
-            UIColor(hex: "#F7FBFF").cgColor,
-            UIColor(hex: "#EAF5FF").cgColor,
-            UIColor(hex: "#FDFEFF").cgColor
+            UIColor(hex: "#F5FBFF").withAlphaComponent(0.78).cgColor,
+            UIColor(hex: "#CFF2FF").withAlphaComponent(0.48).cgColor,
+            UIColor(hex: "#8AD7F7").withAlphaComponent(0.28).cgColor,
+            UIColor(hex: "#FFFFFF").withAlphaComponent(0.36).cgColor
         ] as CFArray
-        let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 0.58, 1])
+        let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 0.42, 0.78, 1])
         context.drawLinearGradient(
             gradient!,
             start: CGPoint(x: bounds.minX, y: bounds.minY),
@@ -153,15 +156,36 @@ struct PetCalendarRenderer {
         )
 
         let frame = bounds.insetBy(dx: 46, dy: 46)
-        let path = UIBezierPath(roundedRect: frame, cornerRadius: 42)
+        drawGlassPanel(in: frame, cornerRadius: 42, context: context)
+    }
+
+    private func drawGlassPanel(in rect: CGRect, cornerRadius: CGFloat, context: CGContext) {
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
         context.saveGState()
-        context.setShadow(offset: CGSize(width: 0, height: 26), blur: 44, color: UIColor(hex: "#4F7FA3").withAlphaComponent(0.14).cgColor)
-        UIColor.white.withAlphaComponent(0.72).setFill()
+        context.setShadow(offset: CGSize(width: 0, height: 28), blur: 48, color: UIColor(hex: "#4F7FA3").withAlphaComponent(0.16).cgColor)
+        UIColor.white.withAlphaComponent(0.16).setFill()
         path.fill()
         context.restoreGState()
 
-        UIColor(hex: "#C8DFF0").withAlphaComponent(0.9).setStroke()
+        context.saveGState()
+        path.addClip()
+        drawAquaGradient(
+            in: rect,
+            context: context,
+            colors: [
+                UIColor.white.withAlphaComponent(0.22),
+                UIColor(hex: "#D7F6FF").withAlphaComponent(0.20),
+                UIColor(hex: "#6BC7F2").withAlphaComponent(0.12)
+            ]
+        )
+        context.restoreGState()
+
+        UIColor.white.withAlphaComponent(0.58).setStroke()
         path.lineWidth = 3
+        path.stroke()
+
+        UIColor(hex: "#86D9FF").withAlphaComponent(0.46).setStroke()
+        path.lineWidth = 1.5
         path.stroke()
     }
 
@@ -230,10 +254,20 @@ struct PetCalendarRenderer {
     ) {
         let radius: CGFloat = 18
         let path = UIBezierPath(roundedRect: rect, cornerRadius: radius)
-        UIColor.white.withAlphaComponent(cell.isInDisplayedMonth ? 0.72 : 0.24).setFill()
-        path.fill()
+        context.saveGState()
+        path.addClip()
+        drawAquaGradient(
+            in: rect,
+            context: context,
+            colors: [
+                UIColor.white.withAlphaComponent(cell.isInDisplayedMonth ? 0.16 : 0.05),
+                UIColor(hex: "#D8F5FF").withAlphaComponent(cell.isInDisplayedMonth ? 0.20 : 0.05),
+                UIColor(hex: "#62C8F2").withAlphaComponent(cell.isInDisplayedMonth ? 0.10 : 0.03)
+            ]
+        )
+        context.restoreGState()
         let baseStroke = entry == nil
-            ? UIColor(hex: "#C8DFF0").withAlphaComponent(cell.isInDisplayedMonth ? 0.72 : 0.26)
+            ? UIColor(hex: "#9DDEFF").withAlphaComponent(cell.isInDisplayedMonth ? 0.56 : 0.18)
             : UIColor(hex: "#93C8ED").withAlphaComponent(0.96)
         baseStroke.setStroke()
         path.lineWidth = entry == nil ? 2 : 3
@@ -254,10 +288,10 @@ struct PetCalendarRenderer {
         path.addClip()
         if let entry, let thumbnail = entry.thumbnail {
             drawImage(thumbnail, in: rect, placement: entry.photoPlacement)
-            UIColor.black.withAlphaComponent(0.10).setFill()
+            UIColor.black.withAlphaComponent(0.06).setFill()
             context.fill(rect)
         } else {
-            UIColor(hex: "#E7F0F8").withAlphaComponent(cell.isFuture ? 0.34 : 0.58).setFill()
+            UIColor.white.withAlphaComponent(cell.isFuture ? 0.04 : 0.08).setFill()
             context.fill(rect)
             drawPaw(in: rect.insetBy(dx: rect.width * 0.23, dy: rect.height * 0.22), alpha: cell.isFuture ? 0.08 : 0.18)
         }
@@ -280,9 +314,24 @@ struct PetCalendarRenderer {
         )
 
         if cell.isFuture {
-            UIColor.white.withAlphaComponent(0.48).setFill()
+            UIColor.white.withAlphaComponent(0.28).setFill()
             UIBezierPath(roundedRect: rect, cornerRadius: radius).fill()
         }
+    }
+
+    private func drawAquaGradient(in rect: CGRect, context: CGContext, colors: [UIColor]) {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let gradient = CGGradient(
+            colorsSpace: colorSpace,
+            colors: colors.map { $0.cgColor } as CFArray,
+            locations: [0, 0.56, 1]
+        )
+        context.drawLinearGradient(
+            gradient!,
+            start: CGPoint(x: rect.minX, y: rect.minY),
+            end: CGPoint(x: rect.maxX, y: rect.maxY),
+            options: []
+        )
     }
 
     private func drawImage(_ image: UIImage, in rect: CGRect, placement: PhotoPlacement) {

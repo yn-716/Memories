@@ -24,7 +24,7 @@ struct PetCalendarHomeView: View {
 
     var body: some View {
         ZStack {
-            MemoriesTheme.background.ignoresSafeArea()
+            PetCalendarAquaBackdrop().ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -36,7 +36,7 @@ struct PetCalendarHomeView: View {
                             .foregroundStyle(MemoriesTheme.textSub)
                             .padding(12)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(MemoriesTheme.card.opacity(0.72))
+                            .background(PetCalendarAquaSurface(cornerRadius: 8))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
 
@@ -95,7 +95,7 @@ struct PetCalendarHomeView: View {
                             .font(.headline.weight(.semibold))
                             .frame(width: 42, height: 42)
                             .foregroundStyle(MemoriesTheme.accentDeep)
-                            .background(MemoriesTheme.subBackground.opacity(0.72))
+                            .background(PetCalendarAquaSurface(cornerRadius: 8))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -114,7 +114,7 @@ struct PetCalendarHomeView: View {
                             .font(.headline.weight(.semibold))
                             .frame(width: 42, height: 42)
                             .foregroundStyle(MemoriesTheme.accentDeep)
-                            .background(MemoriesTheme.subBackground.opacity(0.72))
+                            .background(PetCalendarAquaSurface(cornerRadius: 8))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -183,7 +183,7 @@ struct PetCalendarHomeView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .padding(.horizontal, 10)
-            .background(MemoriesTheme.subBackground.opacity(0.68))
+            .background(PetCalendarAquaSurface(cornerRadius: 8))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -289,7 +289,13 @@ private struct PetCalendarDayCell: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(background)
+                .fill(Color.clear)
+                .background {
+                    PetCalendarAquaSurface(
+                        cornerRadius: 8,
+                        isDimmed: !cell.isInDisplayedMonth || cell.isFuture
+                    )
+                }
                 .overlay {
                     if let thumbnail {
                         PetCalendarPlacedImage(
@@ -323,13 +329,6 @@ private struct PetCalendarDayCell: View {
         }
         .aspectRatio(PetCalendarCellMetrics.aspectRatio, contentMode: .fit)
         .opacity(cell.isFuture ? 0.44 : 1)
-    }
-
-    private var background: Color {
-        if !cell.isInDisplayedMonth {
-            return Color.white.opacity(0.10)
-        }
-        return entry == nil ? Color(hex: "#DDF4FF").opacity(cell.isFuture ? 0.18 : 0.34) : Color.white.opacity(0.18)
     }
 
     private var numberColor: Color {
@@ -399,9 +398,9 @@ private struct PetCalendarGlassPanel<Content: View>: View {
             .background(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.34),
-                        Color(hex: "#D8F5FF").opacity(0.24),
-                        Color(hex: "#76B7E3").opacity(0.12)
+                        Color.white.opacity(0.14),
+                        Color(hex: "#D8F5FF").opacity(0.18),
+                        Color(hex: "#76B7E3").opacity(0.10)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -444,6 +443,90 @@ private struct PetCalendarGlassPanel<Content: View>: View {
     }
 }
 
+private struct PetCalendarAquaBackdrop: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(hex: "#F5FBFF"),
+                Color(hex: "#DDF6FF"),
+                Color(hex: "#B9E7FF"),
+                Color(hex: "#F7FCFF")
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .overlay(alignment: .topTrailing) {
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.0),
+                    Color.white.opacity(0.54),
+                    Color(hex: "#6AD7FF").opacity(0.18),
+                    Color.white.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .rotationEffect(.degrees(28))
+            .offset(x: 120, y: -120)
+        }
+        .overlay(alignment: .bottomLeading) {
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.0),
+                    Color(hex: "#86D9FF").opacity(0.22),
+                    Color.white.opacity(0.32),
+                    Color.white.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .rotationEffect(.degrees(-24))
+            .offset(x: -110, y: 160)
+        }
+    }
+}
+
+private struct PetCalendarAquaSurface: View {
+    var cornerRadius: CGFloat
+    var isDimmed = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isDimmed ? 0.06 : 0.12),
+                        Color(hex: "#D8F5FF").opacity(isDimmed ? 0.08 : 0.16),
+                        Color(hex: "#61C7F2").opacity(isDimmed ? 0.04 : 0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(isDimmed ? 0.22 : 0.64),
+                                Color(hex: "#8BDEFF").opacity(isDimmed ? 0.14 : 0.50)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(isDimmed ? 0.12 : 0.28), lineWidth: 0.6)
+                    .padding(1)
+            }
+    }
+}
+
 private struct PetCalendarPlacedImage: View {
     let image: UIImage
     let placement: PhotoPlacement
@@ -482,7 +565,10 @@ private struct PetCalendarPhotoPlacementPreview: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: PetCalendarCellMetrics.cornerRadius, style: .continuous)
-                    .fill(Color(hex: "#E7F0F8").opacity(0.62))
+                    .fill(Color.clear)
+                    .background {
+                        PetCalendarAquaSurface(cornerRadius: PetCalendarCellMetrics.cornerRadius)
+                    }
 
                 if let image {
                     let drawRect = PhotoPlacementLayout.drawRect(
@@ -600,7 +686,7 @@ struct PetCalendarDayEditorView: View {
 
     var body: some View {
         ZStack {
-            MemoriesTheme.background.ignoresSafeArea()
+            PetCalendarAquaBackdrop().ignoresSafeArea()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -684,7 +770,7 @@ struct PetCalendarDayEditorView: View {
                         .foregroundStyle(MemoriesTheme.accentDeep)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(MemoriesTheme.subBackground.opacity(0.62))
+                        .background(PetCalendarAquaSurface(cornerRadius: 8))
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -865,7 +951,7 @@ struct PetCalendarImportView: View {
         let batchAddTitle = appState.t("calendar.batchAdd")
 
         ZStack {
-            MemoriesTheme.background.ignoresSafeArea()
+            PetCalendarAquaBackdrop().ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     Button {
@@ -1111,7 +1197,7 @@ struct PetCalendarPreviewView: View {
 
     var body: some View {
         ZStack {
-            MemoriesTheme.background.ignoresSafeArea()
+            PetCalendarAquaBackdrop().ignoresSafeArea()
             VStack(spacing: 12) {
                 previewImage
                 actionPanel
@@ -1218,7 +1304,7 @@ struct PetCalendarPreviewView: View {
             }
         }
         .padding(12)
-        .background(MemoriesTheme.card.opacity(0.48))
+        .background(PetCalendarAquaSurface(cornerRadius: 8))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -1357,7 +1443,7 @@ struct PetCalendarHelpView: View {
 
     var body: some View {
         ZStack {
-            MemoriesTheme.background.ignoresSafeArea()
+            PetCalendarAquaBackdrop().ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     helpRow(systemImage: "rectangle.grid.2x2", text: appState.t("calendar.widgetHelpHome"))
@@ -1381,7 +1467,7 @@ struct PetCalendarHelpView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(MemoriesTheme.accentDeep)
                     .frame(width: 36, height: 36)
-                    .background(MemoriesTheme.subBackground.opacity(0.72))
+                    .background(PetCalendarAquaSurface(cornerRadius: 8))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                 Text(text)
@@ -1439,7 +1525,12 @@ private struct CalendarWatermarkButton: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
                 .foregroundStyle(isSelected ? .white : MemoriesTheme.accentDeep)
-                .background(isSelected ? MemoriesTheme.accentDeep : MemoriesTheme.subBackground.opacity(0.54))
+                .background(isSelected ? MemoriesTheme.accentDeep : Color.clear)
+                .background {
+                    if !isSelected {
+                        PetCalendarAquaSurface(cornerRadius: 12)
+                    }
+                }
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)

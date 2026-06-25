@@ -235,7 +235,6 @@ private struct WidgetWeekDayCard: View {
                     .overlay {
                         if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                             WidgetPlacedImage(image: image, placement: entry.photoPlacement)
-                                .overlay(Color.black.opacity(0.08))
                         } else {
                             WidgetPawShape()
                                 .fill(Color.secondary.opacity(day.isFuture ? 0.10 : 0.18))
@@ -281,7 +280,6 @@ private struct WidgetMonthCell: View {
                 .overlay {
                     if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                         WidgetPlacedImage(image: image, placement: entry.photoPlacement)
-                            .overlay(Color.black.opacity(0.08))
                     } else if cell.isInDisplayedMonth {
                         WidgetPawShape()
                             .fill(Color.secondary.opacity(0.16))
@@ -334,10 +332,6 @@ private struct AccessoryCircularWidgetView: View {
             if let featuredEntry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: featuredEntry) {
                 WidgetPlacedImage(image: image, placement: featuredEntry.photoPlacement)
                     .clipShape(Circle())
-                    .overlay {
-                        Circle()
-                            .fill(Color.black.opacity(0.10))
-                    }
                     .overlay {
                         Circle()
                             .stroke(WidgetCalendarColors.registeredFrame.opacity(0.92), lineWidth: 1.3)
@@ -480,9 +474,9 @@ private struct WidgetAquaBackground: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color.white.opacity(0.52),
-                Color(red: 0.73, green: 0.92, blue: 1.0).opacity(0.34),
-                Color(red: 0.44, green: 0.72, blue: 0.92).opacity(0.24)
+                Color.white.opacity(0.14),
+                Color(red: 0.73, green: 0.92, blue: 1.0).opacity(0.20),
+                Color(red: 0.44, green: 0.72, blue: 0.92).opacity(0.14)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -499,9 +493,9 @@ private struct WidgetAquaSurface: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDimmed ? 0.18 : 0.34),
-                        Color(red: 0.74, green: 0.91, blue: 1.0).opacity(isDimmed ? 0.08 : 0.22),
-                        Color(red: 0.24, green: 0.55, blue: 0.74).opacity(isDimmed ? 0.04 : 0.10)
+                        Color.white.opacity(isDimmed ? 0.06 : 0.14),
+                        Color(red: 0.74, green: 0.91, blue: 1.0).opacity(isDimmed ? 0.06 : 0.16),
+                        Color(red: 0.24, green: 0.55, blue: 0.74).opacity(isDimmed ? 0.03 : 0.08)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -554,6 +548,8 @@ private struct WidgetPawShape: Shape {
 }
 
 private struct WidgetPlacedImage: View {
+    @Environment(\.widgetRenderingMode) private var widgetRenderingMode
+
     let image: UIImage
     let placement: WidgetPhotoPlacement
 
@@ -573,7 +569,14 @@ private struct WidgetPlacedImage: View {
 
     @ViewBuilder
     private func fullColorImage(drawRect: CGRect) -> some View {
-        if #available(iOS 18.0, *) {
+        if widgetRenderingMode == .vibrant {
+            Canvas { context, _ in
+                context.draw(Image(uiImage: image), in: drawRect)
+            }
+            .drawingGroup(opaque: false, colorMode: .extendedLinear)
+            .saturation(1.35)
+            .contrast(1.10)
+        } else if #available(iOS 18.0, *) {
             Image(uiImage: image)
                 .resizable()
                 .widgetAccentedRenderingMode(.fullColor)

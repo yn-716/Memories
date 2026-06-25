@@ -12,7 +12,7 @@ struct MemoriesWidgetEntry: TimelineEntry {
 
 struct MemoriesWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> MemoriesWidgetEntry {
-        MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load())
+        MemoriesWidgetEntry(date: Date(), snapshot: .placeholder)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MemoriesWidgetEntry) -> Void) {
@@ -59,8 +59,6 @@ private struct MemoriesWidgetView: View {
             .containerBackground(for: .widget) {
                 WidgetAquaBackground()
             }
-            .unredacted()
-            .widgetAccentable(false)
     }
 
     @ViewBuilder
@@ -138,6 +136,9 @@ private struct TodayWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
     var body: some View {
+        let todayEntry = snapshot.todayEntry
+        let todayImage = todayEntry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) }
+
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -160,20 +161,19 @@ private struct TodayWidgetView: View {
 
             ZStack {
                 WidgetAquaSurface(cornerRadius: 12)
-                if let todayEntry = snapshot.todayEntry,
-                   let image = WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) {
-                    WidgetPlacedImage(image: image, placement: todayEntry.photoPlacement)
+                if let todayImage {
+                    WidgetPlacedImage(image: todayImage, placement: todayEntry?.photoPlacement ?? .default)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else if snapshot.todayEntry?.overlayStyle.effectiveWeatherIcon == nil {
+                } else if todayEntry?.overlayStyle.effectiveWeatherIcon == nil {
                     WidgetPawShape()
                         .fill(WidgetCalendarColors.paw.opacity(0.28))
                         .frame(width: 44, height: 44)
                 }
 
-                if let todayEntry = snapshot.todayEntry {
+                if let todayEntry {
                     WidgetWeatherIconLayer(
                         style: todayEntry.overlayStyle,
-                        usesPhotoBackground: WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) != nil
+                        usesPhotoBackground: todayImage != nil
                     )
                 }
             }
@@ -182,9 +182,10 @@ private struct TodayWidgetView: View {
             .clipped()
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(snapshot.todayEntry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.6)
+                    .stroke(todayEntry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.6)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -192,11 +193,11 @@ private struct MonthWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
     let isLarge: Bool
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
-
     var body: some View {
         let cells = WidgetCalendarDateRules.monthGrid(for: snapshot.selectedMonth)
-        let rowCount = max(1, cells.count / 7)
+        let rows = calendarRows(from: cells)
+        let rowCount = max(1, rows.count)
+        let entriesByID = snapshot.entryByID
 
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -210,32 +211,54 @@ private struct MonthWidgetView: View {
                 }
             }
 
-            LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(Array(WidgetCalendarDateRules.weekdays(language: snapshot.displayLanguage).enumerated()), id: \.offset) { _, weekday in
-                    Text(weekday)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(WidgetCalendarColors.mutedText)
-                        .frame(maxWidth: .infinity)
+            VStack(spacing: 3) {
+                HStack(spacing: 3) {
+                    ForEach(Array(WidgetCalendarDateRules.weekdays(language: snapshot.displayLanguage).enumerated()), id: \.offset) { _, weekday in
+                        Text(weekday)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(WidgetCalendarColors.mutedText)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
 
-                ForEach(cells, id: \.id) { cell in
-                    WidgetMonthCell(cell: cell, entry: snapshot.entryByID[cell.id], isLarge: isLarge, rowCount: rowCount)
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 3) {
+                        ForEach(row, id: \.id) { cell in
+                            let entry = entriesByID[cell.id]
+                            WidgetMonthCell(
+                                cell: cell,
+                                entry: entry,
+                                image: entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) },
+                                isLarge: isLarge,
+                                rowCount: rowCount
+                            )
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var monthTitle: String {
         WidgetCalendarDateRules.monthTitle(for: snapshot.selectedMonth, language: snapshot.displayLanguage)
+    }
+
+    private func calendarRows(from cells: [WidgetMonthCellModel]) -> [[WidgetMonthCellModel]] {
+        stride(from: 0, to: cells.count, by: 7).map { start in
+            Array(cells[start..<min(start + 7, cells.count)])
+        }
     }
 }
 
 private struct WeekWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
-
     var body: some View {
+        let days = weekDays
+        let entriesByID = snapshot.entryByID
+
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
                 Text(WidgetCalendarDateRules.weekTitle(for: Date(), language: snapshot.displayLanguage))
@@ -248,12 +271,20 @@ private struct WeekWidgetView: View {
                 }
             }
 
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(Array(weekDays.enumerated()), id: \.offset) { index, day in
-                    WidgetWeekDayCard(day: day, entry: snapshot.entryByID[day.id], index: index)
+            HStack(spacing: 4) {
+                ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                    let entry = entriesByID[day.id]
+                    WidgetWeekDayCard(
+                        day: day,
+                        entry: entry,
+                        image: entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) },
+                        index: index
+                    )
+                    .frame(maxWidth: .infinity)
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var weekDays: [WidgetWeekDayModel] {
@@ -268,10 +299,11 @@ private struct WeekWidgetView: View {
 private struct WidgetWeekDayCard: View {
     let day: WidgetWeekDayModel
     let entry: WidgetPetCalendarEntry?
+    let image: UIImage?
     let index: Int
 
     var body: some View {
-        let hasPhoto = entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) } != nil
+        let hasPhoto = image != nil
         let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
 
         VStack(spacing: 3) {
@@ -283,8 +315,8 @@ private struct WidgetWeekDayCard: View {
             ZStack(alignment: .topLeading) {
                 WidgetAquaSurface(cornerRadius: 6, isDimmed: day.isFuture)
                     .overlay {
-                        if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
-                            WidgetPlacedImage(image: image, placement: entry.photoPlacement)
+                        if let image {
+                            WidgetPlacedImage(image: image, placement: entry?.photoPlacement ?? .default)
                         } else if !hasWeatherIcon {
                             WidgetPawShape()
                                 .fill(WidgetCalendarColors.paw.opacity(day.isFuture ? 0.12 : 0.24))
@@ -320,11 +352,12 @@ private struct WidgetWeekDayCard: View {
 private struct WidgetMonthCell: View {
     let cell: WidgetMonthCellModel
     let entry: WidgetPetCalendarEntry?
+    let image: UIImage?
     let isLarge: Bool
     let rowCount: Int
 
     var body: some View {
-        let hasPhoto = entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) } != nil
+        let hasPhoto = image != nil
         let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
 
         ZStack(alignment: .topLeading) {
@@ -336,8 +369,8 @@ private struct WidgetMonthCell: View {
                     }
                 }
                 .overlay {
-                    if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
-                        WidgetPlacedImage(image: image, placement: entry.photoPlacement)
+                    if let image {
+                        WidgetPlacedImage(image: image, placement: entry?.photoPlacement ?? .default)
                     } else if cell.isInDisplayedMonth, !hasWeatherIcon {
                         WidgetPawShape()
                             .fill(WidgetCalendarColors.paw.opacity(0.23))
@@ -1124,14 +1157,54 @@ private struct WidgetPetCalendarEntryList: Decodable {
             if let entry = try? container.decode(WidgetPetCalendarEntry.self) {
                 entries.append(entry)
             } else {
+                let previousIndex = container.currentIndex
                 _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
+                if container.currentIndex == previousIndex {
+                    break
+                }
             }
         }
         self.entries = entries
     }
 }
 
-private struct WidgetPetCalendarDiscardedValue: Decodable {}
+private struct WidgetPetCalendarDiscardedValue: Decodable {
+    init(from decoder: Decoder) throws {
+        if var container = try? decoder.unkeyedContainer() {
+            while !container.isAtEnd {
+                _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
+            }
+            return
+        }
+
+        if let container = try? decoder.container(keyedBy: WidgetPetCalendarDynamicCodingKey.self) {
+            for key in container.allKeys {
+                _ = try? container.decode(WidgetPetCalendarDiscardedValue.self, forKey: key)
+            }
+            return
+        }
+
+        let container = try? decoder.singleValueContainer()
+        _ = try? container?.decode(Bool.self)
+        _ = try? container?.decode(Double.self)
+        _ = try? container?.decode(String.self)
+    }
+}
+
+private struct WidgetPetCalendarDynamicCodingKey: CodingKey {
+    var stringValue: String
+    var intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = nil
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = "\(intValue)"
+        self.intValue = intValue
+    }
+}
 
 private extension KeyedDecodingContainer {
     func decodeLossyArray<Element: Decodable>(_ type: Element.Type, forKey key: Key) -> [Element] {
@@ -1149,7 +1222,11 @@ private struct WidgetPetCalendarLossyArray<Element: Decodable>: Decodable {
             if let element = try? container.decode(Element.self) {
                 elements.append(element)
             } else {
+                let previousIndex = container.currentIndex
                 _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
+                if container.currentIndex == previousIndex {
+                    break
+                }
             }
         }
         self.elements = elements

@@ -12,7 +12,7 @@ struct MemoriesWidgetEntry: TimelineEntry {
 
 struct MemoriesWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> MemoriesWidgetEntry {
-        MemoriesWidgetEntry(date: Date(), snapshot: .placeholder)
+        MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MemoriesWidgetEntry) -> Void) {
@@ -56,6 +56,8 @@ private struct MemoriesWidgetView: View {
 
     var body: some View {
         content
+            .redacted(reason: [])
+            .unredacted()
             .containerBackground(for: .widget) {
                 WidgetAquaBackground()
             }

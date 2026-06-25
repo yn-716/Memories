@@ -326,7 +326,24 @@ private struct AccessoryCircularWidgetView: View {
 
     var body: some View {
         ZStack {
-            AccessoryWidgetBackground()
+            if let featuredEntry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: featuredEntry) {
+                WidgetPlacedImage(image: image, placement: featuredEntry.photoPlacement)
+                    .clipShape(Circle())
+                    .overlay {
+                        Circle()
+                            .fill(Color.black.opacity(0.28))
+                    }
+                    .overlay {
+                        Circle()
+                            .stroke(WidgetCalendarColors.registeredFrame.opacity(0.92), lineWidth: 1.3)
+                    }
+            } else {
+                AccessoryWidgetBackground()
+                WidgetPawShape()
+                    .fill(Color.secondary.opacity(0.48))
+                    .padding(12)
+            }
+
             VStack(spacing: 0) {
                 Text(WidgetCalendarDateRules.shortMonthTitle(for: Date(), language: snapshot.displayLanguage))
                     .font(.system(size: 8, weight: .semibold))
@@ -337,7 +354,13 @@ private struct AccessoryCircularWidgetView: View {
                     .font(.system(size: 7, weight: .semibold))
                     .lineLimit(1)
             }
+            .foregroundStyle(featuredEntry == nil ? Color.primary : Color.white)
+            .shadow(color: featuredEntry == nil ? .clear : Color.black.opacity(0.34), radius: 1, y: 1)
         }
+    }
+
+    private var featuredEntry: WidgetPetCalendarEntry? {
+        snapshot.featuredEntry
     }
 }
 
@@ -345,43 +368,68 @@ private struct AccessoryRectangularWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Text(WidgetCalendarDateRules.weekTitle(for: Date(), language: snapshot.displayLanguage))
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
-                Spacer(minLength: 2)
-                if snapshot.showsBranding {
-                    Text("Memories")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
+        HStack(spacing: 5) {
+            featuredPhoto
+                .frame(width: 38)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text(WidgetCalendarDateRules.compactWeekTitle(for: Date(), language: snapshot.displayLanguage))
+                        .font(.caption2.weight(.semibold))
                         .lineLimit(1)
+                    Spacer(minLength: 2)
+                    if snapshot.showsBranding {
+                        Text("Memories")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                weekRow { day in
+                    Text(day.weekdaySymbol)
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                weekRow { day in
+                    Text("\(day.day)")
+                        .font(.system(size: 9, weight: day.isToday ? .bold : .semibold))
+                        .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
+                }
+                weekRow { day in
+                    statusMark(day)
                 }
             }
+        }
+    }
 
-            weekRow { day in
-                Text(day.weekdaySymbol)
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            weekRow { day in
-                Text("\(day.day)")
-                    .font(.system(size: 10, weight: day.isToday ? .bold : .semibold))
-                    .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
-            }
-            weekRow { day in
-                statusMark(day)
+    @ViewBuilder
+    private var featuredPhoto: some View {
+        if let featuredEntry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: featuredEntry) {
+            WidgetPlacedImage(image: image, placement: featuredEntry.photoPlacement)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(WidgetCalendarColors.registeredFrame.opacity(0.92), lineWidth: 1.2)
+                }
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.secondary.opacity(0.18))
+                WidgetPawShape()
+                    .fill(Color.secondary.opacity(0.36))
+                    .padding(9)
             }
         }
     }
 
     private func weekRow<Content: View>(@ViewBuilder content: @escaping (WidgetWeekDayModel) -> Content) -> some View {
         HStack(spacing: 2) {
-            ForEach(0..<weekDays.count, id: \.self) { index in
-                content(weekDays[index])
+            ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
+                content(day)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 10)
-                    .opacity(weekDays[index].isFuture ? 0.48 : 1)
+                    .frame(height: 9)
+                    .opacity(day.isFuture ? 0.48 : 1)
             }
         }
     }
@@ -392,6 +440,10 @@ private struct AccessoryRectangularWidgetView: View {
             registeredEntryIDs: snapshot.entryIDs,
             language: snapshot.displayLanguage
         )
+    }
+
+    private var featuredEntry: WidgetPetCalendarEntry? {
+        snapshot.featuredEntry
     }
 
     @ViewBuilder
@@ -517,6 +569,13 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
 
     var todayEntry: WidgetPetCalendarEntry? {
         entryByID[WidgetCalendarDateRules.id(for: Date())]
+    }
+
+    var featuredEntry: WidgetPetCalendarEntry? {
+        let today = WidgetCalendarDateRules.calendar.startOfDay(for: Date())
+        return entries
+            .filter { WidgetCalendarDateRules.calendar.startOfDay(for: $0.date) <= today }
+            .max { $0.date < $1.date }
     }
 
     var entryByID: [String: WidgetPetCalendarEntry] {
@@ -875,6 +934,15 @@ private enum WidgetCalendarDateRules {
             return "\(monthTitle(for: date, language: language)) 今週"
         case .english:
             return "\(monthTitle(for: date, language: language)) Week"
+        }
+    }
+
+    static func compactWeekTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
+        switch language {
+        case .japanese:
+            return "\(shortMonthTitle(for: date, language: language)) 今週"
+        case .english:
+            return "\(shortMonthTitle(for: date, language: language)) Week"
         }
     }
 

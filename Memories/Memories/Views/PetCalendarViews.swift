@@ -350,11 +350,10 @@ private struct PetCalendarDayCell: View {
 private enum PetCalendarCellMetrics {
     static let aspectRatio: CGFloat = 0.78
     static let cornerRadius: CGFloat = 8
-    static let dateFontRatio: CGFloat = 0.16
-    static let dateMinimumFont: CGFloat = 12
-    static let dateMaximumFont: CGFloat = 18
-    static let dateInsetRatio: CGFloat = 0.06
-    static let dateMinimumInset: CGFloat = 5
+    static let dateFontRatio: CGFloat = 0.24
+    static let dateMinimumFont: CGFloat = 11
+    static let dateInsetRatio: CGFloat = 0.08
+    static let dateMinimumInset: CGFloat = 4
     static let registeredFrame = Color(hex: "#93C8ED")
 }
 
@@ -368,11 +367,7 @@ private struct PetCalendarDateGuideLayer: View {
         GeometryReader { proxy in
             let minSide = min(proxy.size.width, proxy.size.height)
             let inset = max(minSide * PetCalendarCellMetrics.dateInsetRatio, PetCalendarCellMetrics.dateMinimumInset)
-            let dateTop = inset
-            let fontSize = min(
-                max(minSide * PetCalendarCellMetrics.dateFontRatio, PetCalendarCellMetrics.dateMinimumFont),
-                PetCalendarCellMetrics.dateMaximumFont
-            )
+            let fontSize = max(minSide * PetCalendarCellMetrics.dateFontRatio, PetCalendarCellMetrics.dateMinimumFont)
 
             ZStack(alignment: .topLeading) {
                 if isToday {
@@ -385,7 +380,7 @@ private struct PetCalendarDateGuideLayer: View {
                     .font(.system(size: fontSize, weight: .bold, design: .rounded))
                     .foregroundStyle(defaultDateColor)
                     .shadow(color: usesPhotoBackground ? Color.black.opacity(0.30) : .clear, radius: 2, y: 1)
-                    .position(x: inset + 6, y: dateTop + 8)
+                    .position(x: inset + fontSize * 0.46, y: inset + fontSize * 0.48)
             }
         }
     }

@@ -16,9 +16,11 @@ struct HomeView: View {
     @State private var selectedCreationStyle: CardCreationStyle = .ticketFrame
     @State private var showDraftFullBeforeEdit = false
     @State private var showDrafts = false
+    @State private var showPetCalendar = false
+    @State private var showPetCalendarToday = false
 
     var body: some View {
-        let photoButtonTitle = isLoadingPhoto ? appState.t("common.loading") : appState.t("home.choosePhoto")
+        let photoButtonTitle = isLoadingPhoto ? appState.t("common.loading") : appState.t("home.imageEditor")
 
         NavigationStack {
             ZStack {
@@ -47,6 +49,13 @@ struct HomeView: View {
                                 photoLibrary: .shared()
                             )
                             .disabled(isLoadingPhoto)
+
+                            Button {
+                                showPetCalendar = true
+                            } label: {
+                                HomeActionRow(title: appState.t("home.petCalendar"), systemImage: "calendar")
+                            }
+                            .buttonStyle(.plain)
 
                             NavigationLink {
                                 DraftsView()
@@ -92,6 +101,12 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showDrafts) {
                 DraftsView()
             }
+            .navigationDestination(isPresented: $showPetCalendar) {
+                PetCalendarHomeView()
+            }
+            .navigationDestination(isPresented: $showPetCalendarToday) {
+                PetCalendarHomeView(openTodayEditorOnAppear: true)
+            }
             .navigationDestination(item: $editorRoute) { route in
                 EditorView(
                     template: route.template,
@@ -126,6 +141,9 @@ struct HomeView: View {
                 Button(appState.t("common.cancel"), role: .cancel) {}
             } message: {
                 Text(appState.t("drafts.fullBeforeEdit.message"))
+            }
+            .onOpenURL { url in
+                handleDeepLink(url)
             }
         }
     }
@@ -249,6 +267,17 @@ struct HomeView: View {
 
     private var simpleTemplate: Template {
         templates.first(where: { $0.renderStyle == .simpleCard }) ?? .previewPetLifelog
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        switch MemoriesDeepLinkRouter.route(for: url) {
+        case .petCalendar:
+            showPetCalendar = true
+        case .petCalendarToday:
+            showPetCalendarToday = true
+        case nil:
+            break
+        }
     }
 }
 
@@ -422,7 +451,7 @@ private struct EditorRoute: Identifiable, Hashable {
     }
 }
 
-private struct HomeActionRow: View {
+struct HomeActionRow: View {
     let title: String
     let systemImage: String
 

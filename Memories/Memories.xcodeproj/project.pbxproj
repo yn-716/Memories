@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D9CA11012FF1000000000001 /* MemoriesWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D9CA11032FF1000000000003 /* MemoriesWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		D9CA11022FF1000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D9CF3A702FE159CD00ECB6F7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D9CA11092FF1000000000009;
+			remoteInfo = MemoriesWidgetExtension;
+		};
 		D9CF4B0A2FEA000000ECB6F7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = D9CF3A702FE159CD00ECB6F7 /* Project object */;
@@ -16,15 +27,58 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		D9CA11052FF1000000000005 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				D9CA11012FF1000000000001 /* MemoriesWidgetExtension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		D9CA11032FF1000000000003 /* MemoriesWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MemoriesWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		D9CF3A782FE159CD00ECB6F7 /* Memories.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memories.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D9CF3BEA2FE3A6C800ECB6F7 /* Memories.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Memories.storekit; path = StoreKit/Memories.storekit; sourceTree = "<group>"; };
 		D9CF4B002FEA000000ECB6F7 /* MemoriesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoriesTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D9CA11102FF1000000000010 /* Exceptions for "Memories" folder in "Memories" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D9CF3A772FE159CD00ECB6F7 /* Memories */;
+		};
+		D9CA11112FF1000000000011 /* Exceptions for "MemoriesWidgetExtension" folder in "MemoriesWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D9CA11092FF1000000000009 /* MemoriesWidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		D9CA11042FF1000000000004 /* MemoriesWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D9CA11112FF1000000000011 /* Exceptions for "MemoriesWidgetExtension" folder in "MemoriesWidgetExtension" target */,
+			);
+			path = MemoriesWidgetExtension;
+			sourceTree = "<group>";
+		};
 		D9CF3A7A2FE159CD00ECB6F7 /* Memories */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				D9CA11102FF1000000000010 /* Exceptions for "Memories" folder in "Memories" target */,
+			);
 			path = Memories;
 			sourceTree = "<group>";
 		};
@@ -36,6 +90,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		D9CA11062FF1000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D9CF3A752FE159CD00ECB6F7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -59,6 +120,7 @@
 				D9CF3BEA2FE3A6C800ECB6F7 /* Memories.storekit */,
 				D9CF3A7A2FE159CD00ECB6F7 /* Memories */,
 				D9CF4B012FEA000000ECB6F7 /* MemoriesTests */,
+				D9CA11042FF1000000000004 /* MemoriesWidgetExtension */,
 				D9CF3A792FE159CD00ECB6F7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -68,6 +130,7 @@
 			children = (
 				D9CF3A782FE159CD00ECB6F7 /* Memories.app */,
 				D9CF4B002FEA000000ECB6F7 /* MemoriesTests.xctest */,
+				D9CA11032FF1000000000003 /* MemoriesWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -75,6 +138,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		D9CA11092FF1000000000009 /* MemoriesWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D9CA110D2FF100000000000D /* Build configuration list for PBXNativeTarget "MemoriesWidgetExtension" */;
+			buildPhases = (
+				D9CA11082FF1000000000008 /* Sources */,
+				D9CA11062FF1000000000006 /* Frameworks */,
+				D9CA11072FF1000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D9CA11042FF1000000000004 /* MemoriesWidgetExtension */,
+			);
+			name = MemoriesWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = MemoriesWidgetExtension;
+			productReference = D9CA11032FF1000000000003 /* MemoriesWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		D9CF3A772FE159CD00ECB6F7 /* Memories */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D9CF3A832FE159CE00ECB6F7 /* Build configuration list for PBXNativeTarget "Memories" */;
@@ -83,10 +168,12 @@
 				D9CF3A752FE159CD00ECB6F7 /* Frameworks */,
 				D9CF3A762FE159CD00ECB6F7 /* Resources */,
 				D9CF3BEB2FE3B00000ECB6F7 /* Copy Debug StoreKit Configuration */,
+				D9CA11052FF1000000000005 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				D9CA110A2FF100000000000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				D9CF3A7A2FE159CD00ECB6F7 /* Memories */,
@@ -131,6 +218,9 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					D9CA11092FF1000000000009 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					D9CF3A772FE159CD00ECB6F7 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -156,11 +246,19 @@
 			targets = (
 				D9CF3A772FE159CD00ECB6F7 /* Memories */,
 				D9CF4B052FEA000000ECB6F7 /* MemoriesTests */,
+				D9CA11092FF1000000000009 /* MemoriesWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		D9CA11072FF1000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D9CF3A762FE159CD00ECB6F7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -202,6 +300,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		D9CA11082FF1000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D9CF3A742FE159CD00ECB6F7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -219,6 +324,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		D9CA110A2FF100000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D9CA11092FF1000000000009 /* MemoriesWidgetExtension */;
+			targetProxy = D9CA11022FF1000000000002 /* PBXContainerItemProxy */;
+		};
 		D9CF4B092FEA000000ECB6F7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = D9CF3A772FE159CD00ECB6F7 /* Memories */;
@@ -227,6 +337,62 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		D9CA110B2FF100000000000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MemoriesWidgetExtension/MemoriesWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PV98WQSVZ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MemoriesWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories.dev.MemoriesWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D9CA110C2FF100000000000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MemoriesWidgetExtension/MemoriesWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8PV98WQSVZ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MemoriesWidgetExtension/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories.dev.MemoriesWidgetExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		D9CF3A812FE159CE00ECB6F7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -353,25 +519,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Memories/Memories.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Memories Pet Life";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Memories Pet Lifeで作成した画像を写真に保存するために使用します。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Memories/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -388,25 +549,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Memories/Memories.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Memories Pet Life";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Memories Pet Lifeで作成した画像を写真に保存するために使用します。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Memories/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories;
+				MARKETING_VERSION = 1.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.Memories.dev;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -432,7 +588,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.MemoriesTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -457,7 +613,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.myfs716.MemoriesTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -471,6 +627,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		D9CA110D2FF100000000000D /* Build configuration list for PBXNativeTarget "MemoriesWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D9CA110B2FF100000000000B /* Debug */,
+				D9CA110C2FF100000000000C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		D9CF3A732FE159CD00ECB6F7 /* Build configuration list for PBXProject "Memories" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -119,6 +119,12 @@ final class MemoriesAppState: ObservableObject {
         }
     }
 
+    @Published var petCalendarDisplayLanguage: PetCalendarDisplayLanguage {
+        didSet {
+            defaults.set(petCalendarDisplayLanguage.rawValue, forKey: Keys.petCalendarDisplayLanguage)
+        }
+    }
+
     #if DEBUG
     @Published var debugEntitlementOverride: DebugEntitlementOverride {
         didSet {
@@ -139,6 +145,9 @@ final class MemoriesAppState: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.appLanguage = AppLanguage(rawValue: defaults.string(forKey: Keys.appLanguage) ?? "") ?? .system
+        self.petCalendarDisplayLanguage = PetCalendarDisplayLanguage(
+            rawValue: defaults.string(forKey: Keys.petCalendarDisplayLanguage) ?? ""
+        ) ?? .japanese
         self.entitlementState = Self.loadEntitlementState(from: defaults)
         if defaults.object(forKey: Keys.suggestPlaceFromPhotoLocation) == nil {
             self.suggestPlaceFromPhotoLocation = true
@@ -322,6 +331,7 @@ final class MemoriesAppState: ObservableObject {
 
     private enum Keys {
         static let appLanguage = "memories.appLanguage"
+        static let petCalendarDisplayLanguage = "memories.petCalendar.displayLanguage"
         static let entitlementState = "memories.entitlementState"
         static let suggestPlaceFromPhotoLocation = "memories.suggestPlaceFromPhotoLocation"
         static let debugEntitlementOverride = "memories.debugEntitlementOverride"

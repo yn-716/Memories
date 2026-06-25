@@ -38,10 +38,7 @@ struct MemoriesWidget: Widget {
         .supportedFamilies([
             .systemSmall,
             .systemMedium,
-            .systemLarge,
-            .accessoryInline,
-            .accessoryCircular,
-            .accessoryRectangular
+            .systemLarge
         ])
     }
 }

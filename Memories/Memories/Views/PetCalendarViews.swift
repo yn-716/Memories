@@ -621,6 +621,43 @@ private struct PetCalendarSelectionSurface: View {
     }
 }
 
+private struct PetCalendarPhotoPickerButtonLabel: View {
+    let title: String
+
+    var body: some View {
+        Label {
+            Text(title)
+                .font(.headline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .layoutPriority(1)
+        } icon: {
+            Image(systemName: "photo")
+                .font(.headline.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 14)
+        .foregroundStyle(MemoriesTheme.accentDeep)
+        .background(.ultraThinMaterial)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.18),
+                    MemoriesTheme.accent.opacity(0.10)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(MemoriesTheme.accentDeep.opacity(0.42), lineWidth: 1.2)
+        }
+    }
+}
+
 private struct PetCalendarPlacedImage: View {
     let image: UIImage
     let placement: PhotoPlacement
@@ -888,10 +925,18 @@ struct PetCalendarDayEditorView: View {
 
         return MemoriesGlassPanel {
             VStack(alignment: .leading, spacing: 14) {
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images, photoLibrary: .shared()) {
-                    MemoriesPrimaryButtonLabel(title: choosePhotoTitle, systemImage: "photo")
+                HStack(spacing: 10) {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images, photoLibrary: .shared()) {
+                        PetCalendarPhotoPickerButtonLabel(title: choosePhotoTitle)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isProcessing)
+
+                    MemoriesPrimaryButton(appState.t("calendar.saveEntry"), systemImage: "checkmark") {
+                        requestSave()
+                    }
+                    .disabled(isProcessing)
                 }
-                .buttonStyle(.plain)
 
                 DatePicker(
                     "",
@@ -904,16 +949,9 @@ struct PetCalendarDayEditorView: View {
 
                 weatherIconPanel
 
-                HStack(spacing: 10) {
-                    MemoriesPrimaryButton(appState.t("calendar.saveEntry"), systemImage: "checkmark") {
-                        requestSave()
-                    }
-                    .disabled(isProcessing)
-
-                    if existingEntry != nil {
-                        MemoriesSecondaryButton(appState.t("calendar.deleteEntry"), systemImage: "trash") {
-                            deleteEntry()
-                        }
+                if existingEntry != nil {
+                    MemoriesSecondaryButton(appState.t("calendar.deleteEntry"), systemImage: "trash") {
+                        deleteEntry()
                     }
                 }
             }
@@ -939,7 +977,7 @@ struct PetCalendarDayEditorView: View {
                 ForEach(PetCalendarWeatherIcon.allCases) { icon in
                     Button {
                         withAnimation(.easeInOut(duration: 0.16)) {
-                            overlayStyle.isWeatherIconVisible = true
+                            enableWeatherIconIfNeeded()
                             overlayStyle.weatherIcon = icon
                         }
                     } label: {
@@ -1042,13 +1080,24 @@ struct PetCalendarDayEditorView: View {
             get: { overlayStyle.isWeatherIconVisible },
             set: { isVisible in
                 withAnimation(.easeInOut(duration: 0.16)) {
-                    overlayStyle.isWeatherIconVisible = isVisible
-                    if isVisible, overlayStyle.weatherIcon == nil {
-                        overlayStyle.weatherIcon = .sunny
+                    if isVisible {
+                        enableWeatherIconIfNeeded()
+                    } else {
+                        overlayStyle.isWeatherIconVisible = false
                     }
                 }
             }
         )
+    }
+
+    private func enableWeatherIconIfNeeded() {
+        overlayStyle.isWeatherIconVisible = true
+        if overlayStyle.weatherIcon == nil {
+            overlayStyle.weatherIcon = .sunny
+        }
+        if overlayStyle.accentColor == .white {
+            overlayStyle.accentColor = .blue
+        }
     }
 
     private func loadExisting() {
@@ -1689,7 +1738,6 @@ struct PetCalendarHelpView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     helpRow(systemImage: "rectangle.grid.2x2", text: appState.t("calendar.widgetHelpHome"))
-                    helpRow(systemImage: "lock.rectangle", text: appState.t("calendar.widgetHelpLock"))
                     helpRow(systemImage: "plus.app", text: appState.t("calendar.widgetHelpAdd"))
                     helpRow(systemImage: "hand.tap", text: appState.t("calendar.widgetHelpTap"))
                 }
@@ -1801,8 +1849,18 @@ private struct PetCalendarAlert: Identifiable {
 private func reloadWidgetTimelines() {
     #if canImport(WidgetKit)
     if #available(iOS 14.0, *) {
-        WidgetCenter.shared.reloadTimelines(ofKind: "MemoriesWidget")
-        WidgetCenter.shared.reloadAllTimelines()
+        func reload() {
+            WidgetCenter.shared.reloadTimelines(ofKind: "MemoriesWidget")
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+
+        reload()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            reload()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            reload()
+        }
     }
     #endif
 }

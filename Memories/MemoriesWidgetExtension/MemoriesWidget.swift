@@ -981,6 +981,14 @@ private enum WidgetPhotoPlacementLayout {
 
 private enum WidgetPetCalendarSnapshotStore {
     static func load() -> WidgetPetCalendarSnapshot {
+        var snapshot = loadSnapshot()
+        if let entries = loadIndexEntries() {
+            snapshot.entries = entries
+        }
+        return snapshot
+    }
+
+    private static func loadSnapshot() -> WidgetPetCalendarSnapshot {
         guard
             let directory = sharedDirectory,
             let data = try? Data(contentsOf: directory.appendingPathComponent(snapshotFileName))
@@ -993,9 +1001,22 @@ private enum WidgetPetCalendarSnapshotStore {
         return (try? decoder.decode(WidgetPetCalendarSnapshot.self, from: data)) ?? .placeholder
     }
 
+    private static func loadIndexEntries() -> [WidgetPetCalendarEntry]? {
+        guard
+            let directory = calendarDirectory,
+            let data = try? Data(contentsOf: directory.appendingPathComponent("index.json"))
+        else {
+            return nil
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([WidgetPetCalendarEntry].self, from: data))?.sorted { $0.date < $1.date }
+    }
+
     static func thumbnail(for entry: WidgetPetCalendarEntry) -> UIImage? {
         guard
-            let directory = sharedDirectory?.deletingLastPathComponent(),
+            let directory = calendarDirectory,
             let thumbnailFileName = entry.thumbnailFileName
         else {
             return nil
@@ -1010,6 +1031,10 @@ private enum WidgetPetCalendarSnapshotStore {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
             .appendingPathComponent("PetCalendar/Widget", isDirectory: true)
+    }
+
+    private static var calendarDirectory: URL? {
+        sharedDirectory?.deletingLastPathComponent()
     }
 }
 

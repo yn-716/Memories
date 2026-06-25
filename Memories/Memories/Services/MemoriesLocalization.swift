@@ -245,8 +245,7 @@ enum MemoriesLocalization {
         "calendar.outputShareFailed": "カレンダーを共有できませんでした。",
         "calendar.widgetHelpTitle": "Widgetの使い方",
         "calendar.widgetHelpHome": "ホーム画面Widgetでは、今月のうちの子カレンダーや今日の1枚を確認できます。",
-        "calendar.widgetHelpLock": "ロック画面Widgetでは、今日の登録状態や今週の登録状況を確認できます。",
-        "calendar.widgetHelpAdd": "ホーム画面やロック画面を長押しし、Widget追加画面から Memories Pet Life を選んで追加してください。",
+        "calendar.widgetHelpAdd": "ホーム画面を長押しし、Widget追加画面から Memories Pet Life を選んで追加してください。",
         "calendar.widgetHelpTap": "Widgetをタップすると、うちの子カレンダーを開けます。",
 
         "drafts.title": "下書き",
@@ -504,8 +503,7 @@ enum MemoriesLocalization {
         "calendar.outputShareFailed": "Could not share calendar.",
         "calendar.widgetHelpTitle": "How to Use Widgets",
         "calendar.widgetHelpHome": "Home Screen widgets can show this month's pet calendar or today's photo.",
-        "calendar.widgetHelpLock": "Lock Screen widgets show today's status and this week's saved days.",
-        "calendar.widgetHelpAdd": "Touch and hold the Home Screen or Lock Screen, open the widget picker, and choose Memories Pet Life.",
+        "calendar.widgetHelpAdd": "Touch and hold the Home Screen, open the widget picker, and choose Memories Pet Life.",
         "calendar.widgetHelpTap": "Tap a widget to open Pet Calendar.",
 
         "drafts.title": "Drafts",

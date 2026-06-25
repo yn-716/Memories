@@ -138,56 +138,73 @@ private struct TodayWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
     var body: some View {
-        let todayEntry = snapshot.todayEntry
-        let todayImage = todayEntry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) }
+        let displayEntry = snapshot.todayEntry ?? snapshot.featuredEntry
+        let displayDate = displayEntry?.date ?? Date()
+        let displayImage = displayEntry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) }
+        let usesPhoto = displayImage != nil
 
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(WidgetCalendarDateRules.dateTitle(for: Date(), language: snapshot.displayLanguage))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(WidgetCalendarColors.text)
-                        .lineLimit(1)
-                    Text(WidgetCalendarDateRules.weekdayTitle(for: Date(), language: snapshot.displayLanguage))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(WidgetCalendarColors.mutedText)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if snapshot.showsBranding {
-                    WidgetWatermark(compact: true)
-                }
+        ZStack(alignment: .topLeading) {
+            WidgetAquaSurface(cornerRadius: 14)
+
+            if let displayImage {
+                WidgetPlacedImage(image: displayImage, placement: displayEntry?.photoPlacement ?? .default)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            } else if displayEntry?.overlayStyle.effectiveWeatherIcon == nil {
+                WidgetPawShape()
+                    .fill(WidgetCalendarColors.paw.opacity(0.28))
+                    .frame(width: 54, height: 54)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            Spacer(minLength: 0)
-
-            ZStack {
-                WidgetAquaSurface(cornerRadius: 12)
-                if let todayImage {
-                    WidgetPlacedImage(image: todayImage, placement: todayEntry?.photoPlacement ?? .default)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else if todayEntry?.overlayStyle.effectiveWeatherIcon == nil {
-                    WidgetPawShape()
-                        .fill(WidgetCalendarColors.paw.opacity(0.28))
-                        .frame(width: 44, height: 44)
-                }
-
-                if let todayEntry {
-                    WidgetWeatherIconLayer(
-                        style: todayEntry.overlayStyle,
-                        usesPhotoBackground: todayImage != nil
-                    )
-                }
+            if let displayEntry {
+                WidgetWeatherIconLayer(
+                    style: displayEntry.overlayStyle,
+                    usesPhotoBackground: usesPhoto
+                )
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 98)
-            .clipped()
-            .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(todayEntry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.6)
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(usesPhoto ? 0.36 : 0.00),
+                    Color.black.opacity(0.00)
+                ],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .allowsHitTesting(false)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(WidgetCalendarDateRules.dateTitle(for: displayDate, language: snapshot.displayLanguage))
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(usesPhoto ? Color.white : WidgetCalendarColors.text)
+                    .shadow(color: usesPhoto ? Color.black.opacity(0.38) : .clear, radius: 1, y: 1)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(WidgetCalendarDateRules.weekdayTitle(for: displayDate, language: snapshot.displayLanguage))
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(usesPhoto ? Color.white.opacity(0.88) : WidgetCalendarColors.mutedText)
+                    .shadow(color: usesPhoto ? Color.black.opacity(0.32) : .clear, radius: 1, y: 1)
+                    .lineLimit(1)
+            }
+            .padding(10)
+
+            if snapshot.showsBranding {
+                VStack {
+                    Spacer()
+                    HStack {
+                        WidgetWatermark(compact: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(8)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(displayEntry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

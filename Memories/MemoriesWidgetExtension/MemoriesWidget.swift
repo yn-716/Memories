@@ -59,7 +59,9 @@ private struct MemoriesWidgetView: View {
 
     var body: some View {
         content
-            .containerBackground(.background, for: .widget)
+            .containerBackground(for: .widget) {
+                WidgetAquaBackground()
+            }
     }
 
     @ViewBuilder
@@ -117,8 +119,7 @@ private struct TodayWidgetView: View {
             Spacer(minLength: 0)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.gray.opacity(0.16))
+                WidgetAquaSurface(cornerRadius: 12)
                 if let todayEntry = snapshot.todayEntry,
                    let image = WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) {
                     WidgetPlacedImage(image: image, placement: todayEntry.photoPlacement)
@@ -230,8 +231,7 @@ private struct WidgetWeekDayCard: View {
                 .frame(height: 10)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(day.isFuture ? Color.gray.opacity(0.08) : Color.gray.opacity(0.15))
+                WidgetAquaSurface(cornerRadius: 6, isDimmed: day.isFuture)
                     .overlay {
                         if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                             WidgetPlacedImage(image: image, placement: entry.photoPlacement)
@@ -272,7 +272,12 @@ private struct WidgetMonthCell: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(cell.isInDisplayedMonth ? Color.gray.opacity(0.16) : Color.clear)
+                .fill(Color.clear)
+                .background {
+                    if cell.isInDisplayedMonth {
+                        WidgetAquaSurface(cornerRadius: 5, isDimmed: cell.isFuture)
+                    }
+                }
                 .overlay {
                     if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                         WidgetPlacedImage(image: image, placement: entry.photoPlacement)
@@ -331,7 +336,7 @@ private struct AccessoryCircularWidgetView: View {
                     .clipShape(Circle())
                     .overlay {
                         Circle()
-                            .fill(Color.black.opacity(0.28))
+                            .fill(Color.black.opacity(0.10))
                     }
                     .overlay {
                         Circle()
@@ -414,8 +419,7 @@ private struct AccessoryRectangularWidgetView: View {
                 }
         } else {
             ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.secondary.opacity(0.18))
+                WidgetAquaSurface(cornerRadius: 6)
                 WidgetPawShape()
                     .fill(Color.secondary.opacity(0.36))
                     .padding(9)
@@ -472,6 +476,55 @@ private enum WidgetCalendarColors {
     static let registeredFrame = Color(red: 0.56, green: 0.78, blue: 0.93)
 }
 
+private struct WidgetAquaBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.52),
+                Color(red: 0.73, green: 0.92, blue: 1.0).opacity(0.34),
+                Color(red: 0.44, green: 0.72, blue: 0.92).opacity(0.24)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+private struct WidgetAquaSurface: View {
+    var cornerRadius: CGFloat
+    var isDimmed = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isDimmed ? 0.18 : 0.34),
+                        Color(red: 0.74, green: 0.91, blue: 1.0).opacity(isDimmed ? 0.08 : 0.22),
+                        Color(red: 0.24, green: 0.55, blue: 0.74).opacity(isDimmed ? 0.04 : 0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(isDimmed ? 0.18 : 0.72),
+                                Color(red: 0.58, green: 0.83, blue: 0.98).opacity(isDimmed ? 0.12 : 0.52)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .widgetAccentable(false)
+    }
+}
+
 private struct WidgetPawShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -512,12 +565,26 @@ private struct WidgetPlacedImage: View {
                 frameRect: frameRect,
                 placement: placement
             )
+            fullColorImage(drawRect: drawRect)
+        }
+        .clipped()
+        .widgetAccentable(false)
+    }
+
+    @ViewBuilder
+    private func fullColorImage(drawRect: CGRect) -> some View {
+        if #available(iOS 18.0, *) {
+            Image(uiImage: image)
+                .resizable()
+                .widgetAccentedRenderingMode(.fullColor)
+                .frame(width: drawRect.width, height: drawRect.height)
+                .position(x: drawRect.midX, y: drawRect.midY)
+        } else {
             Image(uiImage: image)
                 .resizable()
                 .frame(width: drawRect.width, height: drawRect.height)
                 .position(x: drawRect.midX, y: drawRect.midY)
         }
-        .clipped()
     }
 }
 

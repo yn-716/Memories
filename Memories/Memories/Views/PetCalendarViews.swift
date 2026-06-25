@@ -327,9 +327,9 @@ private struct PetCalendarDayCell: View {
 
     private var background: Color {
         if !cell.isInDisplayedMonth {
-            return Color(hex: "#F7FBFF").opacity(0.16)
+            return Color.white.opacity(0.10)
         }
-        return entry == nil ? Color(hex: "#E7F0F8").opacity(cell.isFuture ? 0.32 : 0.56) : MemoriesTheme.card.opacity(0.82)
+        return entry == nil ? Color(hex: "#DDF4FF").opacity(cell.isFuture ? 0.18 : 0.34) : Color.white.opacity(0.18)
     }
 
     private var numberColor: Color {
@@ -400,10 +400,22 @@ private struct PetCalendarGlassPanel<Content: View>: View {
                 LinearGradient(
                     colors: [
                         Color.white.opacity(0.34),
-                        Color(hex: "#EAF5FF").opacity(0.24)
+                        Color(hex: "#D8F5FF").opacity(0.24),
+                        Color(hex: "#76B7E3").opacity(0.12)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
+                )
+            )
+            .background(
+                RadialGradient(
+                    colors: [
+                        Color.white.opacity(0.34),
+                        Color.clear
+                    ],
+                    center: .topLeading,
+                    startRadius: 12,
+                    endRadius: 360
                 )
             )
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
@@ -412,8 +424,9 @@ private struct PetCalendarGlassPanel<Content: View>: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.68),
-                                MemoriesTheme.border.opacity(0.72)
+                                Color.white.opacity(0.82),
+                                Color(hex: "#A7DFFF").opacity(0.70),
+                                MemoriesTheme.border.opacity(0.36)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -421,7 +434,13 @@ private struct PetCalendarGlassPanel<Content: View>: View {
                         lineWidth: 1
                     )
             }
-            .shadow(color: MemoriesTheme.accentDeep.opacity(0.10), radius: 24, y: 12)
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(Color.white.opacity(0.32), lineWidth: 0.8)
+                    .blur(radius: 0.6)
+                    .padding(1)
+            }
+            .shadow(color: MemoriesTheme.accentDeep.opacity(0.12), radius: 26, y: 14)
     }
 }
 

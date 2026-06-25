@@ -92,6 +92,47 @@ private struct MemoriesWidgetView: View {
     }
 }
 
+private struct WidgetWatermark: View {
+    @Environment(\.widgetRenderingMode) private var widgetRenderingMode
+    var compact = false
+
+    var body: some View {
+        let iconSide: CGFloat = compact ? 11 : 14
+        let label = compact ? "Memories" : "Memories Pet Life"
+        let materialTint = widgetRenderingMode == .vibrant ? 0.06 : 0.14
+
+        HStack(spacing: compact ? 3 : 5) {
+            Image("watermark_app_icon")
+                .resizable()
+                .scaledToFill()
+                .frame(width: iconSide, height: iconSide)
+                .clipShape(RoundedRectangle(cornerRadius: iconSide * 0.18, style: .continuous))
+                .opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.82)
+
+            Text(label)
+                .font(.system(size: compact ? 8 : 9, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.74)
+        }
+        .foregroundStyle(Color.primary.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.70))
+        .padding(.horizontal, compact ? 5 : 7)
+        .padding(.vertical, compact ? 3 : 4)
+        .background {
+            Capsule(style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule(style: .continuous)
+                        .fill(Color.black.opacity(materialTint))
+                }
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(widgetRenderingMode == .vibrant ? 0.28 : 0.32), lineWidth: 0.6)
+        }
+        .widgetAccentable(false)
+    }
+}
+
 private struct TodayWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
@@ -109,10 +150,7 @@ private struct TodayWidgetView: View {
                 }
                 Spacer(minLength: 4)
                 if snapshot.showsBranding {
-                    Text("Memories")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    WidgetWatermark(compact: true)
                 }
             }
 
@@ -158,9 +196,7 @@ private struct MonthWidgetView: View {
                     .lineLimit(1)
                 Spacer()
                 if snapshot.showsBranding {
-                    Text("Memories")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    WidgetWatermark()
                 }
             }
 
@@ -197,10 +233,7 @@ private struct WeekWidgetView: View {
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if snapshot.showsBranding {
-                    Text("Memories")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    WidgetWatermark(compact: true)
                 }
             }
 
@@ -389,10 +422,7 @@ private struct AccessoryRectangularWidgetView: View {
                         .lineLimit(1)
                     Spacer(minLength: 2)
                     if snapshot.showsBranding {
-                        Text("Memories")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        WidgetWatermark(compact: true)
                     }
                 }
 

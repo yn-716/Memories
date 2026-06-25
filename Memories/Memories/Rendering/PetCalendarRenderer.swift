@@ -63,8 +63,22 @@ struct CalendarWatermarkRenderer {
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
 
-        let pillHeight = max(72, min(96, canvasSize.height * 0.044))
-        let pillWidth = max(410, min(560, canvasSize.width * 0.36))
+        let text = WatermarkRenderer.brandName
+        let pillHeight = max(58, min(78, canvasSize.height * 0.036))
+        let iconSide = pillHeight * 0.62
+        let font = UIFont.systemFont(ofSize: pillHeight * 0.34, weight: .semibold)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.white.withAlphaComponent(0.92)
+        ]
+        let textSize = NSString(string: text).size(withAttributes: textAttributes)
+        let horizontalPadding = pillHeight * 0.30
+        let spacing = pillHeight * 0.18
+        let appIcon = UIImage(named: "watermark_app_icon")
+        let iconWidth = appIcon == nil ? CGFloat.zero : iconSide
+        let iconSpacing = appIcon == nil ? CGFloat.zero : spacing
+        let rawWidth = horizontalPadding * 2 + iconWidth + iconSpacing + textSize.width
+        let pillWidth = min(rawWidth, footerRect.width * 0.58)
         let pill = CGRect(
             x: footerRect.maxX - pillWidth,
             y: footerRect.midY - pillHeight / 2,
@@ -83,20 +97,35 @@ struct CalendarWatermarkRenderer {
         path.lineWidth = 1.5
         path.stroke()
 
-        let iconRect = CGRect(x: pill.minX + 24, y: pill.midY - 24, width: 48, height: 48)
-        UIColor.white.withAlphaComponent(0.94).setFill()
-        PetCalendarRenderer.drawPawPath(in: iconRect).fill()
+        let iconRect = CGRect(
+            x: pill.minX + horizontalPadding,
+            y: pill.midY - iconSide / 2,
+            width: iconSide,
+            height: iconSide
+        )
+        if let appIcon {
+            context.saveGState()
+            UIBezierPath(roundedRect: iconRect, cornerRadius: iconSide * 0.18).addClip()
+            appIcon.draw(in: iconRect, blendMode: .normal, alpha: 0.76)
+            context.restoreGState()
+        }
 
-        let textRect = CGRect(x: iconRect.maxX + 16, y: pill.minY + 17, width: pill.maxX - iconRect.maxX - 38, height: pill.height - 28)
+        let textMinX = appIcon == nil ? pill.minX + horizontalPadding : iconRect.maxX + iconSpacing
+        let textRect = CGRect(
+            x: textMinX,
+            y: pill.midY - textSize.height / 2,
+            width: pill.maxX - textMinX - horizontalPadding,
+            height: textSize.height
+        )
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .left
         paragraph.lineBreakMode = .byTruncatingTail
-        NSString(string: WatermarkRenderer.brandName).draw(
+        NSString(string: text).draw(
             with: textRect,
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
             attributes: [
-                .font: UIFont.systemFont(ofSize: 34, weight: .bold),
-                .foregroundColor: UIColor.white.withAlphaComponent(0.96),
+                .font: font,
+                .foregroundColor: UIColor.white.withAlphaComponent(0.92),
                 .paragraphStyle: paragraph
             ],
             context: nil

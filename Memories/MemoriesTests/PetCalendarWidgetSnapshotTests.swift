@@ -19,22 +19,10 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
         let now = date(year: 2026, month: 6, day: 25)
         let placement = PhotoPlacement(scale: 2, offsetX: 0.2, offsetY: -0.3)
-        let overlayStyle = PetCalendarOverlayStyle(
-            isThemeIconVisible: true,
-            themeIcon: .walk,
-            themeIconCorner: .topRight,
-            isWeatherIconVisible: true,
-            weatherIcon: .sunny,
-            weatherIconCorner: .bottomRight,
-            textColor: .white,
-            accentColor: .blue,
-            fontStyle: .rounded
-        )
         let entry = try repository.save(
             image: makeImage(),
             caption: "hi",
             photoPlacement: placement,
-            overlayStyle: overlayStyle,
             for: now,
             now: now
         )
@@ -56,7 +44,7 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
         XCTAssertEqual(snapshot.entries.first?.caption, "")
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, placement)
-        XCTAssertEqual(snapshot.entries.first?.overlayStyle, overlayStyle)
+        XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
         XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)

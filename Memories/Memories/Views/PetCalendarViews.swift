@@ -231,12 +231,12 @@ struct PetCalendarMonthView: View {
     let repository: PetCalendarRepository?
     let onSelectDate: (Date) -> Void
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
 
     var body: some View {
         PetCalendarGlassPanel {
             VStack(spacing: 8) {
-                LazyVGrid(columns: columns, spacing: 6) {
+                LazyVGrid(columns: columns, spacing: 4) {
                     ForEach(PetCalendarDateRules.weekdaySymbols(language: displayLanguage), id: \.self) { symbol in
                         Text(symbol)
                             .font(.caption.weight(.bold))
@@ -261,7 +261,7 @@ struct PetCalendarMonthView: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(8)
         }
     }
 
@@ -307,18 +307,21 @@ private struct PetCalendarDayCell: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(cell.isToday ? MemoriesTheme.accentDeep : MemoriesTheme.border.opacity(cell.isInDisplayedMonth ? 0.9 : 0.36), lineWidth: cell.isToday ? 2 : 1)
+                        .stroke(registeredFrameColor, lineWidth: entry == nil ? 1 : 1.5)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(cell.isToday ? MemoriesTheme.accentDeep : Color.clear, lineWidth: 2)
                 }
 
-            PetCalendarCellOverlayLayer(
+            PetCalendarDateGuideLayer(
                 dayNumber: cell.dayNumber,
-                overlayStyle: entry?.overlayStyle ?? .default,
-                usesCustomStyle: entry != nil,
                 defaultDateColor: numberColor,
-                isToday: false
+                isToday: false,
+                usesPhotoBackground: thumbnail != nil
             )
         }
-        .aspectRatio(0.78, contentMode: .fit)
+        .aspectRatio(PetCalendarCellMetrics.aspectRatio, contentMode: .fit)
         .opacity(cell.isFuture ? 0.44 : 1)
     }
 
@@ -333,130 +336,58 @@ private struct PetCalendarDayCell: View {
         if !cell.isInDisplayedMonth {
             return MemoriesTheme.textSub.opacity(0.25)
         }
-        return thumbnail == nil ? MemoriesTheme.textMain : (entry?.overlayStyle.textColor.color ?? .white)
+        return thumbnail == nil ? MemoriesTheme.textMain : .white
+    }
+
+    private var registeredFrameColor: Color {
+        if entry != nil {
+            return PetCalendarCellMetrics.registeredFrame
+        }
+        return MemoriesTheme.border.opacity(cell.isInDisplayedMonth ? 0.72 : 0.28)
     }
 }
 
-private struct PetCalendarCellOverlayLayer: View {
+private enum PetCalendarCellMetrics {
+    static let aspectRatio: CGFloat = 0.78
+    static let cornerRadius: CGFloat = 8
+    static let dateFontRatio: CGFloat = 0.16
+    static let dateMinimumFont: CGFloat = 12
+    static let dateMaximumFont: CGFloat = 18
+    static let dateInsetRatio: CGFloat = 0.06
+    static let dateMinimumInset: CGFloat = 5
+    static let registeredFrame = Color(hex: "#93C8ED")
+}
+
+private struct PetCalendarDateGuideLayer: View {
     let dayNumber: Int
-    let overlayStyle: PetCalendarOverlayStyle
-    let usesCustomStyle: Bool
     let defaultDateColor: Color
     let isToday: Bool
+    let usesPhotoBackground: Bool
 
     var body: some View {
         GeometryReader { proxy in
             let minSide = min(proxy.size.width, proxy.size.height)
-            let iconSize = min(max(minSide * 0.18, 18), 28)
-            let inset = max(minSide * 0.06, 5)
+            let inset = max(minSide * PetCalendarCellMetrics.dateInsetRatio, PetCalendarCellMetrics.dateMinimumInset)
             let dateTop = inset
+            let fontSize = min(
+                max(minSide * PetCalendarCellMetrics.dateFontRatio, PetCalendarCellMetrics.dateMinimumFont),
+                PetCalendarCellMetrics.dateMaximumFont
+            )
 
             ZStack(alignment: .topLeading) {
                 if isToday {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: PetCalendarCellMetrics.cornerRadius, style: .continuous)
                         .stroke(MemoriesTheme.accentDeep.opacity(0.92), lineWidth: 2)
                         .padding(2)
                 }
 
                 Text("\(dayNumber)")
-                    .font(overlayStyle.fontStyle.font(size: min(max(minSide * 0.16, 12), 18), weight: .bold))
-                    .foregroundStyle(usesCustomStyle ? overlayStyle.textColor.color : defaultDateColor)
-                    .shadow(color: usesCustomStyle ? Color.black.opacity(0.28) : .clear, radius: 2, y: 1)
+                    .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                    .foregroundStyle(defaultDateColor)
+                    .shadow(color: usesPhotoBackground ? Color.black.opacity(0.30) : .clear, radius: 2, y: 1)
                     .position(x: inset + 6, y: dateTop + 8)
-
-                ForEach(overlayItems.indices, id: \.self) { index in
-                    let item = overlayItems[index]
-                    PetCalendarOverlayIconView(
-                        assetName: item.assetName,
-                        fallbackSystemName: item.symbolName,
-                        color: overlayStyle.accentColor.color,
-                        size: iconSize
-                    )
-                    .position(position(for: item.corner, itemIndex: indexInCorner(index), iconSize: iconSize, inset: inset, size: proxy.size))
-                }
             }
         }
-    }
-
-    private var overlayItems: [PetCalendarOverlayViewItem] {
-        guard usesCustomStyle else {
-            return []
-        }
-        var items: [PetCalendarOverlayViewItem] = []
-        if let icon = overlayStyle.effectiveThemeIcon {
-            items.append(PetCalendarOverlayViewItem(
-                corner: overlayStyle.themeIconCorner,
-                assetName: icon.assetName,
-                symbolName: icon.symbolName
-            ))
-        }
-        if let icon = overlayStyle.effectiveWeatherIcon {
-            items.append(PetCalendarOverlayViewItem(
-                corner: overlayStyle.weatherIconCorner,
-                assetName: icon.assetName,
-                symbolName: icon.symbolName
-            ))
-        }
-        return items
-    }
-
-    private func indexInCorner(_ index: Int) -> Int {
-        let corner = overlayItems[index].corner
-        return overlayItems[..<index].filter { $0.corner == corner }.count
-    }
-
-    private func position(
-        for corner: PetCalendarOverlayCorner,
-        itemIndex: Int,
-        iconSize: CGFloat,
-        inset: CGFloat,
-        size: CGSize
-    ) -> CGPoint {
-        let spacing: CGFloat = 4
-        let stackOffset = CGFloat(itemIndex) * (iconSize + spacing)
-        let x: CGFloat
-        switch corner {
-        case .topLeft, .bottomLeft:
-            x = inset + iconSize / 2
-        case .topRight, .bottomRight:
-            x = size.width - inset - iconSize / 2
-        }
-
-        let y: CGFloat
-        switch corner {
-        case .topLeft:
-            y = inset + iconSize / 2 + 22 + stackOffset
-        case .topRight:
-            y = inset + iconSize / 2 + stackOffset
-        case .bottomLeft, .bottomRight:
-            y = size.height - inset - iconSize / 2 - stackOffset
-        }
-
-        return CGPoint(x: x, y: y)
-    }
-}
-
-private struct PetCalendarOverlayViewItem {
-    var corner: PetCalendarOverlayCorner
-    var assetName: String
-    var symbolName: String
-}
-
-private struct PetCalendarOverlayIconView: View {
-    let assetName: String
-    let fallbackSystemName: String
-    let color: Color
-    let size: CGFloat
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(color.prefersDarkOverlayBackground ? Color.black.opacity(0.30) : Color.white.opacity(0.64))
-            MemoriesTemplateIcon(assetName: assetName, fallbackSystemName: fallbackSystemName)
-                .foregroundStyle(color)
-                .padding(size * 0.24)
-        }
-        .frame(width: size, height: size)
     }
 }
 
@@ -525,7 +456,6 @@ private struct PetCalendarPhotoPlacementPreview: View {
     let image: UIImage?
     let date: Date
     let isToday: Bool
-    let overlayStyle: PetCalendarOverlayStyle
     @Binding var placement: PhotoPlacement
     @Binding var dragStartPlacement: PhotoPlacement?
     @Binding var magnifyStartPlacement: PhotoPlacement?
@@ -537,7 +467,7 @@ private struct PetCalendarPhotoPlacementPreview: View {
             let frameRect = CGRect(origin: .zero, size: proxy.size)
 
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: PetCalendarCellMetrics.cornerRadius, style: .continuous)
                     .fill(Color(hex: "#E7F0F8").opacity(0.62))
 
                 if let image {
@@ -562,22 +492,21 @@ private struct PetCalendarPhotoPlacementPreview: View {
                     }
                 }
 
-                PetCalendarCellOverlayLayer(
+                PetCalendarDateGuideLayer(
                     dayNumber: dayNumber,
-                    overlayStyle: overlayStyle,
-                    usesCustomStyle: image != nil,
-                    defaultDateColor: MemoriesTheme.textMain,
-                    isToday: isToday
+                    defaultDateColor: image == nil ? MemoriesTheme.textMain : .white,
+                    isToday: isToday,
+                    usesPhotoBackground: image != nil
                 )
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: PetCalendarCellMetrics.cornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+                RoundedRectangle(cornerRadius: PetCalendarCellMetrics.cornerRadius, style: .continuous)
+                    .stroke(image == nil ? MemoriesTheme.border.opacity(0.72) : PetCalendarCellMetrics.registeredFrame, lineWidth: image == nil ? 1 : 1.8)
             }
             .gesture(adjustmentGesture(frameRect: frameRect))
         }
-        .aspectRatio(0.78, contentMode: .fit)
+        .aspectRatio(PetCalendarCellMetrics.aspectRatio, contentMode: .fit)
         .frame(maxWidth: .infinity)
     }
 
@@ -635,7 +564,6 @@ struct PetCalendarDayEditorView: View {
     @State private var selectedImage: UIImage?
     @State private var selectedNewImage: UIImage?
     @State private var photoPlacement: PhotoPlacement = .default
-    @State private var overlayStyle: PetCalendarOverlayStyle = .default
     @State private var dragStartPlacement: PhotoPlacement?
     @State private var magnifyStartPlacement: PhotoPlacement?
     @State private var registrationDate: Date
@@ -663,7 +591,6 @@ struct PetCalendarDayEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     imagePreview
-                    overlayEditorPanel
                     editorPanel
                 }
                 .padding(20)
@@ -728,7 +655,6 @@ struct PetCalendarDayEditorView: View {
                     image: selectedImage,
                     date: registrationDate,
                     isToday: PetCalendarDateRules.id(for: registrationDate) == PetCalendarDateRules.id(for: Date()),
-                    overlayStyle: overlayStyle,
                     placement: $photoPlacement,
                     dragStartPlacement: $dragStartPlacement,
                     magnifyStartPlacement: $magnifyStartPlacement
@@ -752,95 +678,6 @@ struct PetCalendarDayEditorView: View {
                 .opacity(selectedImage == nil ? 0.45 : 1)
             }
             .padding(12)
-        }
-    }
-
-    private var overlayEditorPanel: some View {
-        MemoriesGlassPanel {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(appState.t("calendar.overlay"))
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(MemoriesTheme.textMain)
-
-                overlayToggleRow(
-                    title: appState.t("calendar.themeIcon"),
-                    isOn: $overlayStyle.isThemeIconVisible,
-                    onEnabled: {
-                        if overlayStyle.themeIcon == nil {
-                            overlayStyle.themeIcon = .walk
-                        }
-                    }
-                )
-
-                if overlayStyle.isThemeIconVisible {
-                    Picker(appState.t("calendar.themeIcon"), selection: themeIconBinding) {
-                        ForEach(PetCalendarThemeIcon.allCases) { icon in
-                            Label(icon.displayName(language: appState.resolvedLanguage), systemImage: icon.symbolName)
-                                .tag(icon)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    cornerPicker(title: appState.t("calendar.position"), selection: $overlayStyle.themeIconCorner)
-                }
-
-                Divider().opacity(0.5)
-
-                overlayToggleRow(
-                    title: appState.t("calendar.weatherIcon"),
-                    isOn: $overlayStyle.isWeatherIconVisible,
-                    onEnabled: {
-                        if overlayStyle.weatherIcon == nil {
-                            overlayStyle.weatherIcon = .sunny
-                        }
-                    }
-                )
-
-                if overlayStyle.isWeatherIconVisible {
-                    Picker(appState.t("calendar.weatherIcon"), selection: weatherIconBinding) {
-                        ForEach(PetCalendarWeatherIcon.allCases) { icon in
-                            Label(icon.displayName(language: appState.resolvedLanguage), systemImage: icon.symbolName)
-                                .tag(icon)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    cornerPicker(title: appState.t("calendar.position"), selection: $overlayStyle.weatherIconCorner)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(appState.t("calendar.color"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(MemoriesTheme.textSub)
-
-                    HStack(spacing: 10) {
-                        ForEach(PetCalendarOverlayColorStyle.allCases) { colorStyle in
-                            Button {
-                                overlayStyle.textColor = colorStyle
-                                overlayStyle.accentColor = colorStyle
-                            } label: {
-                                Circle()
-                                    .fill(colorStyle.color)
-                                    .frame(width: 30, height: 30)
-                                    .overlay {
-                                        Circle()
-                                            .stroke(MemoriesTheme.accentDeep.opacity(overlayStyle.accentColor == colorStyle ? 0.95 : 0.22), lineWidth: overlayStyle.accentColor == colorStyle ? 3 : 1)
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(colorStyle.displayName(language: appState.resolvedLanguage))
-                        }
-                    }
-                }
-
-                Picker(appState.t("calendar.font"), selection: $overlayStyle.fontStyle) {
-                    ForEach(PetCalendarOverlayFontStyle.allCases) { fontStyle in
-                        Text(fontStyle.displayName(language: appState.resolvedLanguage)).tag(fontStyle)
-                    }
-                }
-                .pickerStyle(.segmented)
-            }
-            .padding(16)
         }
     }
 
@@ -880,55 +717,12 @@ struct PetCalendarDayEditorView: View {
         }
     }
 
-    private func overlayToggleRow(title: String, isOn: Binding<Bool>, onEnabled: @escaping () -> Void) -> some View {
-        Toggle(isOn: Binding(
-            get: { isOn.wrappedValue },
-            set: { newValue in
-                isOn.wrappedValue = newValue
-                if newValue {
-                    onEnabled()
-                }
-            }
-        )) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(MemoriesTheme.textMain)
-        }
-        .tint(MemoriesTheme.accentDeep)
-    }
-
-    private func cornerPicker(title: String, selection: Binding<PetCalendarOverlayCorner>) -> some View {
-        Picker(title, selection: selection) {
-            ForEach(PetCalendarOverlayCorner.allCases) { corner in
-                Text(corner.displayName(language: appState.resolvedLanguage)).tag(corner)
-            }
-        }
-        .pickerStyle(.menu)
-    }
-
-    private var themeIconBinding: Binding<PetCalendarThemeIcon> {
-        Binding {
-            overlayStyle.themeIcon ?? .walk
-        } set: { newValue in
-            overlayStyle.themeIcon = newValue
-        }
-    }
-
-    private var weatherIconBinding: Binding<PetCalendarWeatherIcon> {
-        Binding {
-            overlayStyle.weatherIcon ?? .sunny
-        } set: { newValue in
-            overlayStyle.weatherIcon = newValue
-        }
-    }
-
     private func loadExisting() {
         guard let repository else {
             return
         }
         existingEntry = repository.entry(for: registrationDate)
         photoPlacement = existingEntry?.photoPlacement ?? .default
-        overlayStyle = existingEntry?.overlayStyle ?? .default
         if let existingEntry {
             selectedImage = repository.image(for: existingEntry)
         }
@@ -974,7 +768,6 @@ struct PetCalendarDayEditorView: View {
         selectedNewImage = pending.image
         photoPlacement = .default
         existingEntry = repository?.entry(for: registrationDate)
-        overlayStyle = existingEntry?.overlayStyle ?? .default
     }
 
     private func requestSave() {
@@ -1007,7 +800,6 @@ struct PetCalendarDayEditorView: View {
                 image: image,
                 caption: "",
                 photoPlacement: photoPlacement,
-                overlayStyle: overlayStyle,
                 for: registrationDate,
                 allowReplace: allowReplace
             )
@@ -1426,8 +1218,7 @@ struct PetCalendarPreviewView: View {
             PetCalendarRenderEntry(
                 date: entry.date,
                 thumbnail: repository.image(for: entry) ?? repository.thumbnail(for: entry),
-                photoPlacement: entry.photoPlacement,
-                overlayStyle: entry.overlayStyle
+                photoPlacement: entry.photoPlacement
             )
         }
         renderedImage = PetCalendarRenderer().render(
@@ -1640,37 +1431,6 @@ private struct CalendarWatermarkButton: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled)
         .opacity(isEnabled ? 1 : 0.45)
-    }
-}
-
-private extension PetCalendarOverlayColorStyle {
-    var color: Color {
-        Color(hex: hex)
-    }
-}
-
-private extension PetCalendarOverlayFontStyle {
-    func font(size: CGFloat, weight: Font.Weight) -> Font {
-        switch self {
-        case .rounded:
-            return .system(size: size, weight: weight, design: .rounded)
-        case .regular:
-            return .system(size: size, weight: weight, design: .default)
-        case .bold:
-            return .system(size: size, weight: .bold, design: .default)
-        }
-    }
-}
-
-private extension Color {
-    var prefersDarkOverlayBackground: Bool {
-        guard let components = UIColor(self).cgColor.components else {
-            return true
-        }
-        let red = components.indices.contains(0) ? components[0] : 1
-        let green = components.indices.contains(1) ? components[1] : red
-        let blue = components.indices.contains(2) ? components[2] : red
-        return (red * 0.299 + green * 0.587 + blue * 0.114) > 0.58
     }
 }
 

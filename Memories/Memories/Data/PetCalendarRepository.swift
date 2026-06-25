@@ -68,7 +68,6 @@ struct PetCalendarRepository {
         image: UIImage?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
-        overlayStyle: PetCalendarOverlayStyle = .default,
         for date: Date,
         allowReplace: Bool = false,
         now: Date = Date()
@@ -118,7 +117,7 @@ struct PetCalendarRepository {
             thumbnailFileName: thumbnailFileName,
             caption: "",
             photoPlacement: photoPlacement.clamped,
-            overlayStyle: overlayStyle,
+            overlayStyle: .default,
             createdAt: existing?.createdAt ?? nowDate,
             updatedAt: nowDate
         )

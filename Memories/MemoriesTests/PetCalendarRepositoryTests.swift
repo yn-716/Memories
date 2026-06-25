@@ -95,30 +95,18 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.entry(for: now)?.photoPlacement, placement)
     }
 
-    func testRepositoryStoresAndRestoresOverlayStyle() throws {
+    func testRepositoryDefaultsOverlayStyleOnNewSaves() throws {
         let repository = try makeRepository()
         let now = date(year: 2026, month: 6, day: 25)
-        let overlayStyle = PetCalendarOverlayStyle(
-            isThemeIconVisible: true,
-            themeIcon: .cafe,
-            themeIconCorner: .bottomLeft,
-            isWeatherIconVisible: true,
-            weatherIcon: .rainy,
-            weatherIconCorner: .topRight,
-            textColor: .navy,
-            accentColor: .blue,
-            fontStyle: .bold
-        )
 
         let entry = try repository.save(
             image: makeImage(),
-            overlayStyle: overlayStyle,
             for: now,
             now: now
         )
 
-        XCTAssertEqual(entry.overlayStyle, overlayStyle)
-        XCTAssertEqual(repository.entry(for: now)?.overlayStyle, overlayStyle)
+        XCTAssertEqual(entry.overlayStyle, .default)
+        XCTAssertEqual(repository.entry(for: now)?.overlayStyle, .default)
     }
 
     func testRepositoryClampsSavedPhotoPlacement() throws {
@@ -197,22 +185,11 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertFalse(snapshot.entries.first?.thumbnailFileName == entry.imageFileName)
     }
 
-    func testWidgetSnapshotStoresDisplayLanguageBrandingAndOverlayStyle() throws {
+    func testWidgetSnapshotStoresDisplayLanguageBrandingAndDefaultOverlayStyle() throws {
         let rootURL = makeTemporaryDirectory()
         let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
         let now = date(year: 2026, month: 6, day: 25)
-        let overlayStyle = PetCalendarOverlayStyle(
-            isThemeIconVisible: true,
-            themeIcon: .birthday,
-            themeIconCorner: .topRight,
-            isWeatherIconVisible: true,
-            weatherIcon: .snowy,
-            weatherIconCorner: .bottomRight,
-            textColor: .black,
-            accentColor: .softGray,
-            fontStyle: .regular
-        )
-        _ = try repository.save(image: makeImage(), overlayStyle: overlayStyle, for: now, now: now)
+        _ = try repository.save(image: makeImage(), for: now, now: now)
 
         try repository.writeWidgetSnapshot(
             entries: repository.loadEntries(),
@@ -231,7 +208,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
 
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
-        XCTAssertEqual(snapshot.entries.first?.overlayStyle, overlayStyle)
+        XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
     }
 
     private func makeRepository() throws -> PetCalendarRepository {

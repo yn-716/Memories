@@ -3,18 +3,18 @@ import UIKit
 
 struct PetCalendarRenderEntry: Hashable {
     var date: Date
-    var caption: String
     var thumbnail: UIImage?
+    var photoPlacement: PhotoPlacement = .default
 
     static func == (lhs: PetCalendarRenderEntry, rhs: PetCalendarRenderEntry) -> Bool {
         PetCalendarDateRules.id(for: lhs.date) == PetCalendarDateRules.id(for: rhs.date)
-            && lhs.caption == rhs.caption
             && lhs.thumbnail === rhs.thumbnail
+            && lhs.photoPlacement == rhs.photoPlacement
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(PetCalendarDateRules.id(for: date))
-        hasher.combine(caption)
+        hasher.combine(photoPlacement)
         hasher.combine(thumbnail.map(ObjectIdentifier.init))
     }
 }
@@ -50,12 +50,56 @@ protocol CalendarWatermarkDrawing {
 
 struct DefaultCalendarWatermarkDrawer: CalendarWatermarkDrawing {
     func drawCalendarWatermark(mode: WatermarkMode, in context: CGContext, size: CGSize, bounds: CGRect) {
-        WatermarkRenderer().draw(
-            mode: mode,
-            overlayPosition: .topLeft,
-            in: context,
-            size: size,
-            bounds: bounds
+        CalendarWatermarkRenderer().draw(mode: mode, in: context, canvasSize: size, footerRect: bounds)
+    }
+}
+
+struct CalendarWatermarkRenderer {
+    func draw(mode: WatermarkMode, in context: CGContext, canvasSize: CGSize, footerRect: CGRect) {
+        guard mode == .visible else {
+            return
+        }
+
+        UIGraphicsPushContext(context)
+        defer { UIGraphicsPopContext() }
+
+        let pillHeight = max(72, min(96, canvasSize.height * 0.044))
+        let pillWidth = max(410, min(560, canvasSize.width * 0.36))
+        let pill = CGRect(
+            x: footerRect.maxX - pillWidth,
+            y: footerRect.midY - pillHeight / 2,
+            width: pillWidth,
+            height: pillHeight
+        )
+
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: 10), blur: 22, color: UIColor.black.withAlphaComponent(0.18).cgColor)
+        let path = UIBezierPath(roundedRect: pill, cornerRadius: pillHeight / 2)
+        UIColor.black.withAlphaComponent(0.46).setFill()
+        path.fill()
+        context.restoreGState()
+
+        UIColor.white.withAlphaComponent(0.22).setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+
+        let iconRect = CGRect(x: pill.minX + 24, y: pill.midY - 24, width: 48, height: 48)
+        UIColor.white.withAlphaComponent(0.94).setFill()
+        PetCalendarRenderer.drawPawPath(in: iconRect).fill()
+
+        let textRect = CGRect(x: iconRect.maxX + 16, y: pill.minY + 17, width: pill.maxX - iconRect.maxX - 38, height: pill.height - 28)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .left
+        paragraph.lineBreakMode = .byTruncatingTail
+        NSString(string: WatermarkRenderer.brandName).draw(
+            with: textRect,
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine],
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 34, weight: .bold),
+                .foregroundColor: UIColor.white.withAlphaComponent(0.96),
+                .paragraphStyle: paragraph
+            ],
+            context: nil
         )
     }
 }
@@ -79,9 +123,9 @@ struct PetCalendarRenderer {
             if configuration.watermarkMode == .visible {
                 let footerBounds = CGRect(
                     x: bounds.minX + 70,
-                    y: bounds.maxY - 210,
+                    y: bounds.maxY - 190,
                     width: bounds.width - 140,
-                    height: 130
+                    height: 110
                 )
                 watermarkDrawer.drawCalendarWatermark(
                     mode: configuration.watermarkMode,
@@ -94,14 +138,29 @@ struct PetCalendarRenderer {
     }
 
     private func drawBackground(in context: CGContext, bounds: CGRect) {
-        UIColor(hex: "#F6FAFF").setFill()
-        context.fill(bounds)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colors = [
+            UIColor(hex: "#F7FBFF").cgColor,
+            UIColor(hex: "#EAF5FF").cgColor,
+            UIColor(hex: "#FDFEFF").cgColor
+        ] as CFArray
+        let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 0.58, 1])
+        context.drawLinearGradient(
+            gradient!,
+            start: CGPoint(x: bounds.minX, y: bounds.minY),
+            end: CGPoint(x: bounds.maxX, y: bounds.maxY),
+            options: []
+        )
 
         let frame = bounds.insetBy(dx: 46, dy: 46)
         let path = UIBezierPath(roundedRect: frame, cornerRadius: 42)
-        UIColor.white.setFill()
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: 26), blur: 44, color: UIColor(hex: "#4F7FA3").withAlphaComponent(0.14).cgColor)
+        UIColor.white.withAlphaComponent(0.72).setFill()
         path.fill()
-        UIColor(hex: "#D8E8F5").withAlphaComponent(0.9).setStroke()
+        context.restoreGState()
+
+        UIColor(hex: "#C8DFF0").withAlphaComponent(0.9).setStroke()
         path.lineWidth = 3
         path.stroke()
     }
@@ -161,14 +220,6 @@ struct PetCalendarRenderer {
             ).insetBy(dx: 6, dy: 6)
             drawCell(cell, entry: entriesByID[cell.id], in: rect, context: context)
         }
-
-        drawText(
-            WatermarkRenderer.brandName,
-            in: CGRect(x: content.minX, y: content.maxY - 64, width: content.width, height: 40),
-            font: .systemFont(ofSize: 24, weight: .semibold),
-            color: UIColor(hex: "#6B7D8C").withAlphaComponent(0.42),
-            alignment: .center
-        )
     }
 
     private func drawCell(
@@ -179,9 +230,9 @@ struct PetCalendarRenderer {
     ) {
         let radius: CGFloat = 18
         let path = UIBezierPath(roundedRect: rect, cornerRadius: radius)
-        UIColor(hex: "#FFFFFF").setFill()
+        UIColor.white.withAlphaComponent(cell.isInDisplayedMonth ? 0.72 : 0.24).setFill()
         path.fill()
-        UIColor(hex: "#D8E8F5").withAlphaComponent(cell.isInDisplayedMonth ? 0.88 : 0.32).setStroke()
+        UIColor(hex: "#C8DFF0").withAlphaComponent(cell.isInDisplayedMonth ? 0.82 : 0.26).setStroke()
         path.lineWidth = 2
         path.stroke()
 
@@ -199,13 +250,13 @@ struct PetCalendarRenderer {
         context.saveGState()
         path.addClip()
         if let entry, let thumbnail = entry.thumbnail {
-            drawImage(thumbnail, in: rect)
-            UIColor.black.withAlphaComponent(0.16).setFill()
+            drawImage(thumbnail, in: rect, placement: entry.photoPlacement)
+            UIColor.black.withAlphaComponent(0.10).setFill()
             context.fill(rect)
         } else {
-            UIColor(hex: "#E6ECF2").setFill()
+            UIColor(hex: "#E7F0F8").withAlphaComponent(cell.isFuture ? 0.34 : 0.58).setFill()
             context.fill(rect)
-            drawPaw(in: rect.insetBy(dx: rect.width * 0.22, dy: rect.height * 0.22), alpha: cell.isFuture ? 0.12 : 0.24)
+            drawPaw(in: rect.insetBy(dx: rect.width * 0.23, dy: rect.height * 0.22), alpha: cell.isFuture ? 0.08 : 0.18)
         }
         context.restoreGState()
 
@@ -225,71 +276,50 @@ struct PetCalendarRenderer {
             alignment: .left
         )
 
-        if let caption = entry?.caption, !caption.isEmpty {
-            let captionRect = CGRect(x: rect.minX + 10, y: rect.maxY - 38, width: rect.width - 20, height: 28)
-            UIColor.black.withAlphaComponent(0.28).setFill()
-            UIBezierPath(roundedRect: captionRect.insetBy(dx: -5, dy: -2), cornerRadius: 9).fill()
-            drawText(
-                caption,
-                in: captionRect,
-                font: .systemFont(ofSize: 20, weight: .semibold),
-                color: .white,
-                alignment: .center
-            )
-        }
-
         if cell.isFuture {
             UIColor.white.withAlphaComponent(0.48).setFill()
             UIBezierPath(roundedRect: rect, cornerRadius: radius).fill()
         }
     }
 
-    private func drawImage(_ image: UIImage, in rect: CGRect) {
-        let imageRatio = image.size.width / max(image.size.height, 1)
-        let rectRatio = rect.width / max(rect.height, 1)
-        let drawSize: CGSize
-        if imageRatio > rectRatio {
-            drawSize = CGSize(width: rect.height * imageRatio, height: rect.height)
-        } else {
-            drawSize = CGSize(width: rect.width, height: rect.width / max(imageRatio, 0.001))
-        }
-
-        let drawRect = CGRect(
-            x: rect.midX - drawSize.width / 2,
-            y: rect.midY - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
+    private func drawImage(_ image: UIImage, in rect: CGRect, placement: PhotoPlacement) {
+        let drawRect = PhotoPlacementLayout.drawRect(imageSize: image.size, frameRect: rect, placement: placement)
         image.draw(in: drawRect)
     }
 
     private func drawPaw(in rect: CGRect, alpha: CGFloat) {
         UIColor(hex: "#4F7FA3").withAlphaComponent(alpha).setFill()
-        let pad = min(rect.width, rect.height)
-        let toeSize = pad * 0.22
-        let toeY = rect.minY + pad * 0.05
+        Self.drawPawPath(in: rect).fill()
+    }
+
+    static func drawPawPath(in rect: CGRect) -> UIBezierPath {
+        let side = min(rect.width, rect.height)
+        let origin = CGPoint(x: rect.midX - side / 2, y: rect.midY - side / 2)
+        let path = UIBezierPath()
+        let toeSize = side * 0.18
         let toeCenters = [
-            CGPoint(x: rect.midX - pad * 0.25, y: toeY + toeSize),
-            CGPoint(x: rect.midX, y: toeY + toeSize * 0.55),
-            CGPoint(x: rect.midX + pad * 0.25, y: toeY + toeSize),
-            CGPoint(x: rect.midX - pad * 0.02, y: toeY + toeSize * 1.25)
+            CGPoint(x: origin.x + side * 0.24, y: origin.y + side * 0.28),
+            CGPoint(x: origin.x + side * 0.42, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.58, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.76, y: origin.y + side * 0.28)
         ]
         for center in toeCenters {
-            UIBezierPath(ovalIn: CGRect(
+            path.append(UIBezierPath(ovalIn: CGRect(
                 x: center.x - toeSize / 2,
                 y: center.y - toeSize / 2,
                 width: toeSize,
-                height: toeSize
-            )).fill()
+                height: toeSize * 1.12
+            )))
         }
 
         let padRect = CGRect(
-            x: rect.midX - pad * 0.24,
-            y: rect.midY - pad * 0.04,
-            width: pad * 0.48,
-            height: pad * 0.42
+            x: origin.x + side * 0.30,
+            y: origin.y + side * 0.46,
+            width: side * 0.40,
+            height: side * 0.36
         )
-        UIBezierPath(ovalIn: padRect).fill()
+        path.append(UIBezierPath(roundedRect: padRect, cornerRadius: side * 0.18))
+        return path
     }
 
     private func drawText(

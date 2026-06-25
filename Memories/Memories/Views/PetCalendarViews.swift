@@ -13,7 +13,6 @@ struct PetCalendarHomeView: View {
     @State private var selectedMonth = PetCalendarDateRules.monthStart(for: Date())
     @State private var entries: [PetCalendarDayEntry] = []
     @State private var selectedDay: PetCalendarIdentifiedDate?
-    @State private var showBatchImport = false
     @State private var showPreview = false
     @State private var showHelp = false
     @State private var didOpenInitialTodayEditor = false
@@ -68,11 +67,6 @@ struct PetCalendarHomeView: View {
         }
         .navigationDestination(item: $selectedDay) { value in
             PetCalendarDayEditorView(date: value.date) {
-                reloadEntries()
-            }
-        }
-        .navigationDestination(isPresented: $showBatchImport) {
-            PetCalendarImportView {
                 reloadEntries()
             }
         }
@@ -155,13 +149,6 @@ struct PetCalendarHomeView: View {
     private var actionGrid: some View {
         VStack(spacing: 10) {
             Button {
-                showBatchImport = true
-            } label: {
-                HomeActionRow(title: appState.t("calendar.batchAdd"), systemImage: "photo.on.rectangle.angled")
-            }
-            .buttonStyle(.plain)
-
-            Button {
                 showPreview = true
             } label: {
                 HomeActionRow(title: appState.t("calendar.preview"), systemImage: "square.and.arrow.down")
@@ -231,7 +218,7 @@ struct PetCalendarMonthView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
 
     var body: some View {
-        MemoriesGlassPanel {
+        PetCalendarGlassPanel {
             VStack(spacing: 8) {
                 LazyVGrid(columns: columns, spacing: 6) {
                     ForEach(PetCalendarDateRules.weekdaySymbols(language: displayLanguage), id: \.self) { symbol in
@@ -289,15 +276,14 @@ private struct PetCalendarDayCell: View {
                 .fill(background)
                 .overlay {
                     if let thumbnail {
-                        Image(uiImage: thumbnail)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .clipped()
+                        PetCalendarPlacedImage(
+                            image: thumbnail,
+                            placement: entry?.photoPlacement ?? .default
+                        )
                             .overlay(Color.black.opacity(0.12))
                     } else if cell.isInDisplayedMonth {
                         PetCalendarPawShape()
-                            .fill(MemoriesTheme.accentDeep.opacity(cell.isFuture ? 0.08 : 0.18))
+                            .fill(MemoriesTheme.accentDeep.opacity(cell.isFuture ? 0.06 : 0.14))
                             .frame(width: 28, height: 28)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -314,19 +300,6 @@ private struct PetCalendarDayCell: View {
                     .foregroundStyle(numberColor)
 
                 Spacer(minLength: 0)
-
-                if let caption = entry?.caption, !caption.isEmpty {
-                    Text(caption)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(thumbnail == nil ? MemoriesTheme.textSub : .white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.62)
-                        .padding(.horizontal, 3)
-                        .padding(.vertical, 2)
-                        .frame(maxWidth: .infinity)
-                        .background(thumbnail == nil ? Color.clear : Color.black.opacity(0.25))
-                        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                }
             }
             .padding(5)
         }
@@ -336,9 +309,9 @@ private struct PetCalendarDayCell: View {
 
     private var background: Color {
         if !cell.isInDisplayedMonth {
-            return MemoriesTheme.card.opacity(0.18)
+            return Color(hex: "#F7FBFF").opacity(0.16)
         }
-        return entry == nil ? Color(hex: "#E6ECF2") : MemoriesTheme.card
+        return entry == nil ? Color(hex: "#E7F0F8").opacity(cell.isFuture ? 0.32 : 0.56) : MemoriesTheme.card.opacity(0.82)
     }
 
     private var numberColor: Color {
@@ -346,6 +319,156 @@ private struct PetCalendarDayCell: View {
             return MemoriesTheme.textSub.opacity(0.25)
         }
         return thumbnail == nil ? MemoriesTheme.textMain : .white
+    }
+}
+
+private struct PetCalendarGlassPanel<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .background(.ultraThinMaterial)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.34),
+                        Color(hex: "#EAF5FF").opacity(0.24)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.68),
+                                MemoriesTheme.border.opacity(0.72)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: MemoriesTheme.accentDeep.opacity(0.10), radius: 24, y: 12)
+    }
+}
+
+private struct PetCalendarPlacedImage: View {
+    let image: UIImage
+    let placement: PhotoPlacement
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frameRect = CGRect(origin: .zero, size: proxy.size)
+            let drawRect = PhotoPlacementLayout.drawRect(
+                imageSize: image.size,
+                frameRect: frameRect,
+                placement: placement
+            )
+
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: drawRect.width, height: drawRect.height)
+                .position(x: drawRect.midX, y: drawRect.midY)
+        }
+        .clipped()
+    }
+}
+
+private struct PetCalendarPhotoPlacementPreview: View {
+    let image: UIImage?
+    @Binding var placement: PhotoPlacement
+    @Binding var dragStartPlacement: PhotoPlacement?
+    @Binding var magnifyStartPlacement: PhotoPlacement?
+
+    @EnvironmentObject private var appState: MemoriesAppState
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frameRect = CGRect(origin: .zero, size: proxy.size)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(hex: "#E7F0F8").opacity(0.62))
+
+                if let image {
+                    let drawRect = PhotoPlacementLayout.drawRect(
+                        imageSize: image.size,
+                        frameRect: frameRect,
+                        placement: placement
+                    )
+
+                    Image(uiImage: image)
+                        .resizable()
+                        .frame(width: drawRect.width, height: drawRect.height)
+                        .position(x: drawRect.midX, y: drawRect.midY)
+                } else {
+                    VStack(spacing: 12) {
+                        PetCalendarPawShape()
+                            .fill(MemoriesTheme.accentDeep.opacity(0.14))
+                            .frame(width: 78, height: 78)
+                        Text(appState.t("calendar.choosePhoto"))
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(MemoriesTheme.textSub)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+            }
+            .gesture(adjustmentGesture(frameRect: frameRect))
+        }
+        .aspectRatio(0.78, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func adjustmentGesture(frameRect: CGRect) -> some Gesture {
+        let drag = DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                guard let image else {
+                    return
+                }
+                let start = dragStartPlacement ?? placement
+                dragStartPlacement = start
+                placement = PhotoPlacementLayout.placement(
+                    from: start,
+                    applyingDrag: value.translation,
+                    imageSize: image.size,
+                    frameRect: frameRect
+                )
+            }
+            .onEnded { _ in
+                dragStartPlacement = nil
+            }
+
+        let magnification = MagnificationGesture()
+            .onChanged { value in
+                guard image != nil else {
+                    return
+                }
+                let start = magnifyStartPlacement ?? placement
+                magnifyStartPlacement = start
+                placement = PhotoPlacement(
+                    scale: start.scale * Double(value),
+                    offsetX: start.offsetX,
+                    offsetY: start.offsetY
+                ).clamped
+            }
+            .onEnded { _ in
+                magnifyStartPlacement = nil
+            }
+
+        return drag.simultaneously(with: magnification)
     }
 }
 
@@ -358,7 +481,9 @@ struct PetCalendarDayEditorView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
     @State private var selectedNewImage: UIImage?
-    @State private var caption = ""
+    @State private var photoPlacement: PhotoPlacement = .default
+    @State private var dragStartPlacement: PhotoPlacement?
+    @State private var magnifyStartPlacement: PhotoPlacement?
     @State private var registrationDate: Date
     @State private var existingEntry: PetCalendarDayEntry?
     @State private var pendingPhoto: PendingPetCalendarPhoto?
@@ -397,12 +522,6 @@ struct PetCalendarDayEditorView: View {
         .task(id: selectedPhotoItem) {
             await loadSelectedPhoto()
         }
-        .onChange(of: caption) { _, newValue in
-            let clipped = PetCalendarDateRules.clippedCaption(newValue)
-            if clipped != newValue {
-                caption = clipped
-            }
-        }
         .confirmationDialog(appState.t("calendar.photoDateMismatchTitle"), isPresented: $showDateMismatch, presenting: pendingPhoto) { pending in
             Button(String(format: appState.t("calendar.registerTargetDate"), PetCalendarDateRules.shortDateTitle(for: registrationDate, language: appState.petCalendarDisplayLanguage))) {
                 applyPendingPhoto(pending, date: registrationDate)
@@ -439,26 +558,40 @@ struct PetCalendarDayEditorView: View {
 
     private var imagePreview: some View {
         MemoriesGlassPanel {
-            ZStack {
-                if let selectedImage {
-                    Image(uiImage: selectedImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 260)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                } else {
-                    VStack(spacing: 12) {
-                        PetCalendarPawShape()
-                            .fill(MemoriesTheme.accentDeep.opacity(0.18))
-                            .frame(width: 72, height: 72)
-                        Text(appState.t("calendar.choosePhoto"))
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(MemoriesTheme.textSub)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 260)
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.t("calendar.adjustPhoto"))
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                    Text(appState.t("calendar.adjustPhotoHint"))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(MemoriesTheme.textSub)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+
+                PetCalendarPhotoPlacementPreview(
+                    image: selectedImage,
+                    placement: $photoPlacement,
+                    dragStartPlacement: $dragStartPlacement,
+                    magnifyStartPlacement: $magnifyStartPlacement
+                )
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        photoPlacement = .default
+                    }
+                } label: {
+                    Label(appState.t("calendar.resetPhotoPlacement"), systemImage: "arrow.counterclockwise")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(MemoriesTheme.accentDeep)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(MemoriesTheme.subBackground.opacity(0.62))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedImage == nil)
+                .opacity(selectedImage == nil ? 0.45 : 1)
             }
             .padding(12)
         }
@@ -473,21 +606,6 @@ struct PetCalendarDayEditorView: View {
                     MemoriesPrimaryButtonLabel(title: choosePhotoTitle, systemImage: "photo")
                 }
                 .buttonStyle(.plain)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(appState.t("calendar.caption"))
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(MemoriesTheme.textMain)
-                        Spacer()
-                        Text(String(format: appState.t("calendar.captionCounter"), caption.count, PetCalendarConstants.maxCaptionLength))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(MemoriesTheme.textSub)
-                    }
-
-                    TextField(appState.t("calendar.caption"), text: $caption)
-                        .textFieldStyle(.roundedBorder)
-                }
 
                 DatePicker(
                     "",
@@ -520,7 +638,7 @@ struct PetCalendarDayEditorView: View {
             return
         }
         existingEntry = repository.entry(for: registrationDate)
-        caption = existingEntry?.caption ?? ""
+        photoPlacement = existingEntry?.photoPlacement ?? .default
         if let existingEntry {
             selectedImage = repository.image(for: existingEntry)
         }
@@ -564,6 +682,7 @@ struct PetCalendarDayEditorView: View {
         registrationDate = PetCalendarDateRules.startOfDay(for: date)
         selectedImage = pending.image
         selectedNewImage = pending.image
+        photoPlacement = .default
         existingEntry = repository?.entry(for: registrationDate)
     }
 
@@ -595,7 +714,8 @@ struct PetCalendarDayEditorView: View {
             let image = selectedNewImage ?? selectedImage
             _ = try repository.save(
                 image: image,
-                caption: caption,
+                caption: "",
+                photoPlacement: photoPlacement,
                 for: registrationDate,
                 allowReplace: allowReplace
             )
@@ -831,7 +951,7 @@ private struct PetCalendarImportGroupView: View {
                     }
                     .pickerStyle(.segmented)
 
-                    Text(existingEntry.caption.isEmpty ? existingEntry.id : existingEntry.caption)
+                    Text(existingEntry.id)
                         .font(.caption.weight(.medium))
                         .foregroundStyle(MemoriesTheme.textSub)
                 }
@@ -1007,8 +1127,8 @@ struct PetCalendarPreviewView: View {
         let entries = repository.loadEntries().map { entry in
             PetCalendarRenderEntry(
                 date: entry.date,
-                caption: entry.caption,
-                thumbnail: repository.thumbnail(for: entry)
+                thumbnail: repository.image(for: entry) ?? repository.thumbnail(for: entry),
+                photoPlacement: entry.photoPlacement
             )
         }
         renderedImage = PetCalendarRenderer().render(
@@ -1176,22 +1296,25 @@ struct PetCalendarPawShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let side = min(rect.width, rect.height)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let toe = side * 0.22
+        let origin = CGPoint(x: rect.midX - side / 2, y: rect.midY - side / 2)
+        let toe = side * 0.18
         let toeCenters = [
-            CGPoint(x: center.x - side * 0.25, y: rect.minY + side * 0.26),
-            CGPoint(x: center.x, y: rect.minY + side * 0.16),
-            CGPoint(x: center.x + side * 0.25, y: rect.minY + side * 0.26),
-            CGPoint(x: center.x, y: rect.minY + side * 0.38)
+            CGPoint(x: origin.x + side * 0.24, y: origin.y + side * 0.28),
+            CGPoint(x: origin.x + side * 0.42, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.58, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.76, y: origin.y + side * 0.28)
         ]
         for point in toeCenters {
-            path.addEllipse(in: CGRect(x: point.x - toe / 2, y: point.y - toe / 2, width: toe, height: toe))
+            path.addEllipse(in: CGRect(x: point.x - toe / 2, y: point.y - toe / 2, width: toe, height: toe * 1.12))
         }
-        path.addEllipse(in: CGRect(
-            x: center.x - side * 0.25,
-            y: center.y - side * 0.05,
-            width: side * 0.5,
-            height: side * 0.42
+        path.addRoundedRect(in: CGRect(
+            x: origin.x + side * 0.30,
+            y: origin.y + side * 0.46,
+            width: side * 0.40,
+            height: side * 0.36
+        ), cornerSize: CGSize(
+            width: side * 0.18,
+            height: side * 0.18
         ))
         return path
     }

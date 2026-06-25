@@ -27,6 +27,8 @@ final class PetCalendarRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(entry.id, "2026-06-20")
+        XCTAssertEqual(entry.caption, "")
+        XCTAssertEqual(entry.photoPlacement, .default)
         XCTAssertEqual(repository.loadEntries().count, 1)
         XCTAssertNotNil(repository.image(for: entry))
         XCTAssertNotNil(repository.thumbnail(for: entry))
@@ -37,7 +39,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertNil(repository.thumbnail(for: entry))
     }
 
-    func testRepositoryRejectsFutureDatesAndLongCaptions() throws {
+    func testRepositoryRejectsFutureDatesAndIgnoresCaptionText() throws {
         let repository = try makeRepository()
         let now = date(year: 2026, month: 6, day: 25)
         let future = date(year: 2026, month: 6, day: 26)
@@ -47,9 +49,9 @@ final class PetCalendarRepositoryTests: XCTestCase {
             XCTAssertEqual(error as? PetCalendarRepositoryError, .futureDateNotAllowed)
         }
 
-        XCTAssertThrowsError(try repository.save(image: image, caption: "12345678901", for: now, now: now)) { error in
-            XCTAssertEqual(error as? PetCalendarRepositoryError, .captionTooLong)
-        }
+        let entry = try repository.save(image: image, caption: "existing caption is not rendered", for: now, now: now)
+        XCTAssertEqual(entry.caption, "")
+        XCTAssertEqual(repository.entry(for: now)?.caption, "")
     }
 
     func testRepositoryRequiresExplicitReplacement() throws {
@@ -72,9 +74,62 @@ final class PetCalendarRepositoryTests: XCTestCase {
         )
 
         XCTAssertEqual(repository.loadEntries().count, 1)
-        XCTAssertEqual(repository.entry(for: targetDate)?.caption, "second")
+        XCTAssertEqual(repository.entry(for: targetDate)?.caption, "")
         XCTAssertEqual(second.createdAt, first.createdAt)
         XCTAssertNotEqual(second.imageFileName, first.imageFileName)
+    }
+
+    func testRepositoryStoresAndRestoresPhotoPlacement() throws {
+        let repository = try makeRepository()
+        let now = date(year: 2026, month: 6, day: 25)
+        let placement = PhotoPlacement(scale: 2.25, offsetX: 0.42, offsetY: -0.38)
+
+        let entry = try repository.save(
+            image: makeImage(),
+            photoPlacement: placement,
+            for: now,
+            now: now
+        )
+
+        XCTAssertEqual(entry.photoPlacement, placement)
+        XCTAssertEqual(repository.entry(for: now)?.photoPlacement, placement)
+    }
+
+    func testRepositoryClampsSavedPhotoPlacement() throws {
+        let repository = try makeRepository()
+        let now = date(year: 2026, month: 6, day: 25)
+
+        let entry = try repository.save(
+            image: makeImage(),
+            photoPlacement: PhotoPlacement(scale: 8, offsetX: -4, offsetY: 3),
+            for: now,
+            now: now
+        )
+
+        XCTAssertEqual(entry.photoPlacement.scale, 3)
+        XCTAssertEqual(entry.photoPlacement.offsetX, -1)
+        XCTAssertEqual(entry.photoPlacement.offsetY, 1)
+    }
+
+    func testDayEntryDecodesLegacyJSONWithoutPhotoPlacement() throws {
+        let json = """
+        {
+          "id": "2026-06-25",
+          "date": "2026-06-25T00:00:00Z",
+          "imageFileName": "image.jpg",
+          "thumbnailFileName": "thumb.jpg",
+          "caption": "legacy caption",
+          "createdAt": "2026-06-25T00:00:00Z",
+          "updatedAt": "2026-06-25T00:00:00Z"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let entry = try decoder.decode(PetCalendarDayEntry.self, from: Data(json.utf8))
+
+        XCTAssertEqual(entry.caption, "legacy caption")
+        XCTAssertEqual(entry.photoPlacement, .default)
     }
 
     func testRepositoryStoresResizedDisplayImageThumbnailAndStorageSize() throws {
@@ -107,6 +162,8 @@ final class PetCalendarRepositoryTests: XCTestCase {
 
         XCTAssertEqual(snapshot.entries.count, 1)
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
+        XCTAssertEqual(snapshot.entries.first?.caption, "")
+        XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)
         XCTAssertFalse(snapshot.entries.first?.thumbnailFileName == entry.imageFileName)
     }
 

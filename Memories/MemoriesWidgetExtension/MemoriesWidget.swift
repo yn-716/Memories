@@ -97,9 +97,7 @@ private struct TodayWidgetView: View {
                     .fill(Color.gray.opacity(0.16))
                 if let todayEntry = snapshot.todayEntry,
                    let image = WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
+                    WidgetPlacedImage(image: image, placement: todayEntry.photoPlacement)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else {
                     WidgetPawShape()
@@ -115,7 +113,7 @@ private struct TodayWidgetView: View {
                 .font(.headline.weight(.bold))
                 .lineLimit(1)
 
-            Text(snapshot.todayEntry?.caption.isEmpty == false ? snapshot.todayEntry?.caption ?? "" : "Today")
+            Text(todayStatusText)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -126,6 +124,13 @@ private struct TodayWidgetView: View {
     private var todayTitle: String {
         let day = Calendar.current.component(.day, from: Date())
         return "\(day)"
+    }
+
+    private var todayStatusText: String {
+        if WidgetCalendarDateRules.isJapaneseLocale {
+            return snapshot.todayEntry == nil ? "今日の1枚を追加" : "登録済み"
+        }
+        return snapshot.todayEntry == nil ? "Add today" : "Saved"
     }
 }
 
@@ -181,9 +186,7 @@ private struct WidgetMonthCell: View {
                 .fill(cell.isInDisplayedMonth ? Color.gray.opacity(0.16) : Color.clear)
                 .overlay {
                     if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
+                        WidgetPlacedImage(image: image, placement: entry.photoPlacement)
                             .overlay(Color.black.opacity(0.08))
                     } else if cell.isInDisplayedMonth {
                         WidgetPawShape()
@@ -217,10 +220,10 @@ private struct AccessoryInlineWidgetView: View {
     }
 
     private var accessoryText: String {
-        if let caption = snapshot.todayEntry?.caption, !caption.isEmpty {
-            return "Pet Calendar: \(caption)"
+        if WidgetCalendarDateRules.isJapaneseLocale {
+            return snapshot.todayEntry == nil ? "うちの子: 今日追加" : "うちの子: 登録済み"
         }
-        return snapshot.todayEntry == nil ? "Pet Calendar: add today" : "Pet Calendar: today"
+        return snapshot.todayEntry == nil ? "Pet Calendar: Add today" : "Pet Calendar: Saved"
     }
 }
 
@@ -250,18 +253,58 @@ private struct AccessoryRectangularWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Pet Calendar")
+        VStack(alignment: .leading, spacing: 3) {
+            Text(WidgetCalendarDateRules.isJapaneseLocale ? "今週" : "This Week")
                 .font(.caption.weight(.semibold))
-            Text(snapshot.todayEntry == nil ? "Add today's photo" : "Today's memory is saved")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
                 .lineLimit(1)
-            if let caption = snapshot.todayEntry?.caption, !caption.isEmpty {
-                Text(caption)
-                    .font(.caption2.weight(.semibold))
-                    .lineLimit(1)
+
+            HStack(spacing: 3) {
+                ForEach(0..<weekDays.count, id: \.self) { index in
+                    weekDayColumn(weekDays[index])
+                }
             }
+        }
+    }
+
+    private var weekDays: [WidgetWeekDayModel] {
+        WidgetCalendarDateRules.week(containing: Date(), registeredEntryIDs: snapshot.entryIDs)
+    }
+
+    private func weekDayColumn(_ day: WidgetWeekDayModel) -> some View {
+        VStack(spacing: 1) {
+            Text(day.weekdaySymbol)
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text("\(day.day)")
+                .font(.system(size: 10, weight: day.isToday ? .bold : .semibold))
+                .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
+            statusMark(day)
+        }
+        .frame(maxWidth: .infinity)
+        .opacity(day.isFuture ? 0.48 : 1)
+        .padding(.vertical, 1)
+        .background(day.isToday ? Color.accentColor.opacity(0.20) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func statusMark(_ day: WidgetWeekDayModel) -> some View {
+        if day.isFuture {
+            Text("-")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary.opacity(0.55))
+        } else if day.isRegistered {
+            Image(systemName: day.isToday ? "checkmark.circle.fill" : "checkmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color.accentColor)
+        } else if day.isToday {
+            Circle()
+                .stroke(Color.accentColor, lineWidth: 1.2)
+                .frame(width: 7, height: 7)
+        } else {
+            Circle()
+                .fill(Color.secondary.opacity(0.38))
+                .frame(width: 5, height: 5)
         }
     }
 }
@@ -270,24 +313,48 @@ private struct WidgetPawShape: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let side = min(rect.width, rect.height)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let toe = side * 0.22
+        let origin = CGPoint(x: rect.midX - side / 2, y: rect.midY - side / 2)
+        let toe = side * 0.18
         let toeCenters = [
-            CGPoint(x: center.x - side * 0.25, y: rect.minY + side * 0.26),
-            CGPoint(x: center.x, y: rect.minY + side * 0.16),
-            CGPoint(x: center.x + side * 0.25, y: rect.minY + side * 0.26),
-            CGPoint(x: center.x, y: rect.minY + side * 0.38)
+            CGPoint(x: origin.x + side * 0.24, y: origin.y + side * 0.28),
+            CGPoint(x: origin.x + side * 0.42, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.58, y: origin.y + side * 0.20),
+            CGPoint(x: origin.x + side * 0.76, y: origin.y + side * 0.28)
         ]
         for point in toeCenters {
-            path.addEllipse(in: CGRect(x: point.x - toe / 2, y: point.y - toe / 2, width: toe, height: toe))
+            path.addEllipse(in: CGRect(x: point.x - toe / 2, y: point.y - toe / 2, width: toe, height: toe * 1.12))
         }
-        path.addEllipse(in: CGRect(
-            x: center.x - side * 0.25,
-            y: center.y - side * 0.05,
-            width: side * 0.5,
-            height: side * 0.42
+        path.addRoundedRect(in: CGRect(
+            x: origin.x + side * 0.30,
+            y: origin.y + side * 0.46,
+            width: side * 0.40,
+            height: side * 0.36
+        ), cornerSize: CGSize(
+            width: side * 0.18,
+            height: side * 0.18
         ))
         return path
+    }
+}
+
+private struct WidgetPlacedImage: View {
+    let image: UIImage
+    let placement: WidgetPhotoPlacement
+
+    var body: some View {
+        GeometryReader { proxy in
+            let frameRect = CGRect(origin: .zero, size: proxy.size)
+            let drawRect = WidgetPhotoPlacementLayout.drawRect(
+                imageSize: image.size,
+                frameRect: frameRect,
+                placement: placement
+            )
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: drawRect.width, height: drawRect.height)
+                .position(x: drawRect.midX, y: drawRect.midY)
+        }
+        .clipped()
     }
 }
 
@@ -309,6 +376,10 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
     var entryByID: [String: WidgetPetCalendarEntry] {
         Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
     }
+
+    var entryIDs: Set<String> {
+        Set(entries.map(\.id))
+    }
 }
 
 struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
@@ -316,6 +387,64 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
     var date: Date
     var thumbnailFileName: String
     var caption: String
+    var photoPlacement: WidgetPhotoPlacement
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case thumbnailFileName
+        case caption
+        case photoPlacement
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        date = try container.decode(Date.self, forKey: .date)
+        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
+        photoPlacement = (try container.decodeIfPresent(WidgetPhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+    }
+}
+
+struct WidgetPhotoPlacement: Codable, Hashable {
+    var scale: Double
+    var offsetX: Double
+    var offsetY: Double
+
+    static let `default` = WidgetPhotoPlacement(scale: 1, offsetX: 0, offsetY: 0)
+
+    var clamped: WidgetPhotoPlacement {
+        WidgetPhotoPlacement(
+            scale: min(max(scale, 1), 3),
+            offsetX: min(max(offsetX, -1), 1),
+            offsetY: min(max(offsetY, -1), 1)
+        )
+    }
+}
+
+private enum WidgetPhotoPlacementLayout {
+    static func drawRect(imageSize: CGSize, frameRect: CGRect, placement: WidgetPhotoPlacement) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0, frameRect.width > 0, frameRect.height > 0 else {
+            return frameRect
+        }
+        let clamped = placement.clamped
+        let baseScale = max(frameRect.width / imageSize.width, frameRect.height / imageSize.height)
+        let drawScale = baseScale * CGFloat(clamped.scale)
+        let drawSize = CGSize(width: imageSize.width * drawScale, height: imageSize.height * drawScale)
+        let overflowX = max(0, (drawSize.width - frameRect.width) / 2)
+        let overflowY = max(0, (drawSize.height - frameRect.height) / 2)
+        let center = CGPoint(
+            x: frameRect.midX + CGFloat(clamped.offsetX) * overflowX,
+            y: frameRect.midY + CGFloat(clamped.offsetY) * overflowY
+        )
+        return CGRect(
+            x: center.x - drawSize.width / 2,
+            y: center.y - drawSize.height / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
+    }
 }
 
 private enum WidgetPetCalendarSnapshotStore {
@@ -358,6 +487,16 @@ private struct WidgetMonthCellModel: Hashable {
     var isFuture: Bool
 }
 
+private struct WidgetWeekDayModel: Identifiable, Hashable {
+    var id: String
+    var date: Date
+    var day: Int
+    var weekdaySymbol: String
+    var isToday: Bool
+    var isFuture: Bool
+    var isRegistered: Bool
+}
+
 private enum WidgetCalendarDateRules {
     static let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
 
@@ -367,6 +506,10 @@ private enum WidgetCalendarDateRules {
         return calendar
     }
 
+    static var isJapaneseLocale: Bool {
+        Locale.current.language.languageCode?.identifier == "ja"
+    }
+
     static func id(for date: Date) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
@@ -374,6 +517,32 @@ private enum WidgetCalendarDateRules {
 
     static func monthStart(for date: Date) -> Date {
         calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? calendar.startOfDay(for: date)
+    }
+
+    static func startOfWeek(containing date: Date) -> Date {
+        let start = calendar.startOfDay(for: date)
+        let leadingDays = (calendar.component(.weekday, from: start) - calendar.firstWeekday + 7) % 7
+        return calendar.date(byAdding: .day, value: -leadingDays, to: start) ?? start
+    }
+
+    static func week(containing date: Date, now: Date = Date(), registeredEntryIDs: Set<String>) -> [WidgetWeekDayModel] {
+        let start = startOfWeek(containing: date)
+        let todayID = id(for: now)
+        return (0..<7).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: start) else {
+                return nil
+            }
+            let dayID = id(for: day)
+            return WidgetWeekDayModel(
+                id: dayID,
+                date: day,
+                day: calendar.component(.day, from: day),
+                weekdaySymbol: weekdays[offset],
+                isToday: dayID == todayID,
+                isFuture: calendar.startOfDay(for: day) > calendar.startOfDay(for: now),
+                isRegistered: registeredEntryIDs.contains(dayID)
+            )
+        }
     }
 
     static func monthGrid(for month: Date) -> [WidgetMonthCellModel] {

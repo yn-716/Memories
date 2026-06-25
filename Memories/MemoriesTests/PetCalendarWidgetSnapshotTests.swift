@@ -18,7 +18,14 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         let rootURL = makeTemporaryDirectory()
         let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
         let now = date(year: 2026, month: 6, day: 25)
-        let entry = try repository.save(image: makeImage(), caption: "hi", for: now, now: now)
+        let placement = PhotoPlacement(scale: 2, offsetX: 0.2, offsetY: -0.3)
+        let entry = try repository.save(
+            image: makeImage(),
+            caption: "hi",
+            photoPlacement: placement,
+            for: now,
+            now: now
+        )
 
         try repository.writeWidgetSnapshot(entries: repository.loadEntries(), selectedMonth: now)
 
@@ -30,6 +37,8 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.entries.first?.id, "2026-06-25")
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
+        XCTAssertEqual(snapshot.entries.first?.caption, "")
+        XCTAssertEqual(snapshot.entries.first?.photoPlacement, placement)
         XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)
         XCTAssertTrue(FileManager.default.fileExists(atPath: repository.thumbnailURL(for: entry).path))
     }

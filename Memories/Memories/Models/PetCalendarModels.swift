@@ -3,7 +3,6 @@ import Foundation
 
 enum PetCalendarConstants {
     static let appGroupIdentifier = "group.com.myfs716.Memories"
-    static let maxCaptionLength = 10
     static let displayImageMaxLongSide: CGFloat = 1600
     static let displayImageJPEGQuality: CGFloat = 0.82
     static let thumbnailMaxLongSide: CGFloat = 400
@@ -50,8 +49,52 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
     var imageFileName: String
     var thumbnailFileName: String
     var caption: String
+    var photoPlacement: PhotoPlacement
     var createdAt: Date
     var updatedAt: Date
+
+    init(
+        id: String,
+        date: Date,
+        imageFileName: String,
+        thumbnailFileName: String,
+        caption: String = "",
+        photoPlacement: PhotoPlacement = .default,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.date = date
+        self.imageFileName = imageFileName
+        self.thumbnailFileName = thumbnailFileName
+        self.caption = caption
+        self.photoPlacement = photoPlacement.clamped
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case imageFileName
+        case thumbnailFileName
+        case caption
+        case photoPlacement
+        case createdAt
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        date = try container.decode(Date.self, forKey: .date)
+        imageFileName = try container.decode(String.self, forKey: .imageFileName)
+        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
+        photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
 }
 
 struct PetCalendarMonthCell: Identifiable, Hashable {
@@ -190,11 +233,43 @@ enum PetCalendarDateRules {
         return PetCalendarMonthSummary(registeredCount: registeredCount, currentStreak: streak)
     }
 
-    static func clippedCaption(_ caption: String) -> String {
-        String(caption.prefix(PetCalendarConstants.maxCaptionLength))
+    static func week(
+        containing date: Date,
+        now: Date = Date(),
+        registeredEntryIDs: Set<String>,
+        calendar: Calendar = gregorianCalendar()
+    ) -> [PetCalendarWeekDay] {
+        let start = startOfWeek(containing: date, calendar: calendar)
+        let todayID = id(for: now, calendar: calendar)
+        return (0..<7).compactMap { offset in
+            guard let day = calendar.date(byAdding: .day, value: offset, to: start) else {
+                return nil
+            }
+            let dayID = id(for: day, calendar: calendar)
+            return PetCalendarWeekDay(
+                id: dayID,
+                date: day,
+                dayNumber: calendar.component(.day, from: day),
+                isToday: dayID == todayID,
+                isFuture: !canRegisterPhoto(for: day, now: now, calendar: calendar),
+                isRegistered: registeredEntryIDs.contains(dayID)
+            )
+        }
     }
 
-    static func isCaptionValid(_ caption: String) -> Bool {
-        caption.count <= PetCalendarConstants.maxCaptionLength
+    static func startOfWeek(containing date: Date, calendar: Calendar = gregorianCalendar()) -> Date {
+        let start = startOfDay(for: date, calendar: calendar)
+        let weekday = calendar.component(.weekday, from: start)
+        let leadingDays = (weekday - calendar.firstWeekday + 7) % 7
+        return calendar.date(byAdding: .day, value: -leadingDays, to: start) ?? start
     }
+}
+
+struct PetCalendarWeekDay: Identifiable, Hashable {
+    var id: String
+    var date: Date
+    var dayNumber: Int
+    var isToday: Bool
+    var isFuture: Bool
+    var isRegistered: Bool
 }

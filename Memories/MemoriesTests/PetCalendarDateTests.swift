@@ -72,11 +72,39 @@ final class PetCalendarDateTests: XCTestCase {
         XCTAssertEqual(reloaded.petCalendarDisplayLanguage, .japanese)
     }
 
-    func testCaptionLimitIsCentralizedAndEnforcedByRules() {
-        XCTAssertEqual(PetCalendarConstants.maxCaptionLength, 10)
-        XCTAssertTrue(PetCalendarDateRules.isCaptionValid("1234567890"))
-        XCTAssertFalse(PetCalendarDateRules.isCaptionValid("12345678901"))
-        XCTAssertEqual(PetCalendarDateRules.clippedCaption("12345678901"), "1234567890")
+    func testPhotoPlacementClampsScaleAndOffsets() {
+        let placement = PhotoPlacement(scale: 5, offsetX: -2, offsetY: 2).clamped
+
+        XCTAssertEqual(placement.scale, 3)
+        XCTAssertEqual(placement.offsetX, -1)
+        XCTAssertEqual(placement.offsetY, 1)
+    }
+
+    func testWeekModelStartsOnSundayAndIncludesToday() {
+        let calendar = testCalendar
+        let today = date(year: 2026, month: 6, day: 25)
+        let registeredIDs: Set<String> = ["2026-06-21", "2026-06-25"]
+
+        let week = PetCalendarDateRules.week(
+            containing: today,
+            now: today,
+            registeredEntryIDs: registeredIDs,
+            calendar: calendar
+        )
+
+        XCTAssertEqual(week.map(\.id), [
+            "2026-06-21",
+            "2026-06-22",
+            "2026-06-23",
+            "2026-06-24",
+            "2026-06-25",
+            "2026-06-26",
+            "2026-06-27"
+        ])
+        XCTAssertEqual(week.first?.isRegistered, true)
+        XCTAssertEqual(week[4].isToday, true)
+        XCTAssertEqual(week[4].isRegistered, true)
+        XCTAssertEqual(week[5].isFuture, true)
     }
 
     private var testCalendar: Calendar {

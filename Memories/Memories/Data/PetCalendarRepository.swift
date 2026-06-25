@@ -6,7 +6,6 @@ enum PetCalendarRepositoryError: LocalizedError, Equatable {
     case imageMissing
     case imageWriteFailed
     case futureDateNotAllowed
-    case captionTooLong
     case replacementRequiresConfirmation
 
     var errorDescription: String? {
@@ -19,8 +18,6 @@ enum PetCalendarRepositoryError: LocalizedError, Equatable {
             return "カレンダー画像を保存できませんでした。"
         case .futureDateNotAllowed:
             return "未来の日付には登録できません。"
-        case .captionTooLong:
-            return "キャプションは10文字以内で入力してください。"
         case .replacementRequiresConfirmation:
             return "既存の写真を置き換えるには確認が必要です。"
         }
@@ -69,7 +66,8 @@ struct PetCalendarRepository {
 
     func save(
         image: UIImage?,
-        caption: String,
+        caption: String = "",
+        photoPlacement: PhotoPlacement = .default,
         for date: Date,
         allowReplace: Bool = false,
         now: Date = Date()
@@ -77,12 +75,10 @@ struct PetCalendarRepository {
         guard PetCalendarDateRules.canRegisterPhoto(for: date, now: now, calendar: calendar) else {
             throw PetCalendarRepositoryError.futureDateNotAllowed
         }
-        guard PetCalendarDateRules.isCaptionValid(caption) else {
-            throw PetCalendarRepositoryError.captionTooLong
-        }
         guard let image else {
             throw PetCalendarRepositoryError.imageMissing
         }
+        _ = caption
 
         try ensureDirectories()
 
@@ -119,7 +115,8 @@ struct PetCalendarRepository {
             date: PetCalendarDateRules.startOfDay(for: date, calendar: calendar),
             imageFileName: imageFileName,
             thumbnailFileName: thumbnailFileName,
-            caption: caption,
+            caption: "",
+            photoPlacement: photoPlacement.clamped,
             createdAt: existing?.createdAt ?? nowDate,
             updatedAt: nowDate
         )
@@ -182,7 +179,8 @@ struct PetCalendarRepository {
                     id: entry.id,
                     date: entry.date,
                     thumbnailFileName: entry.thumbnailFileName,
-                    caption: entry.caption
+                    caption: entry.caption,
+                    photoPlacement: entry.photoPlacement
                 )
             }
         )
@@ -298,6 +296,38 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     var date: Date
     var thumbnailFileName: String
     var caption: String
+    var photoPlacement: PhotoPlacement
+
+    init(
+        id: String,
+        date: Date,
+        thumbnailFileName: String,
+        caption: String = "",
+        photoPlacement: PhotoPlacement = .default
+    ) {
+        self.id = id
+        self.date = date
+        self.thumbnailFileName = thumbnailFileName
+        self.caption = caption
+        self.photoPlacement = photoPlacement.clamped
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case date
+        case thumbnailFileName
+        case caption
+        case photoPlacement
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        date = try container.decode(Date.self, forKey: .date)
+        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
+        photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+    }
 }
 
 private extension UIImage {

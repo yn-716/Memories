@@ -86,9 +86,11 @@ private struct TodayWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Memories Pet Life")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
+            if snapshot.showsBranding {
+                Text("Memories Pet Life")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer(minLength: 0)
 
@@ -99,6 +101,13 @@ private struct TodayWidgetView: View {
                    let image = WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) {
                     WidgetPlacedImage(image: image, placement: todayEntry.photoPlacement)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    WidgetCellOverlayLayer(
+                        day: Calendar.current.component(.day, from: Date()),
+                        overlayStyle: todayEntry.overlayStyle,
+                        usesCustomStyle: true,
+                        showsDate: false,
+                        isLarge: true
+                    )
                 } else {
                     WidgetPawShape()
                         .fill(Color.secondary.opacity(0.22))
@@ -127,7 +136,7 @@ private struct TodayWidgetView: View {
     }
 
     private var todayStatusText: String {
-        if WidgetCalendarDateRules.isJapaneseLocale {
+        if snapshot.displayLanguage == .japanese {
             return snapshot.todayEntry == nil ? "今日の1枚を追加" : "登録済み"
         }
         return snapshot.todayEntry == nil ? "Add today" : "Saved"
@@ -147,13 +156,15 @@ private struct MonthWidgetView: View {
                     .font(.headline.weight(.bold))
                     .lineLimit(1)
                 Spacer()
-                Text("Memories")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                if snapshot.showsBranding {
+                    Text("Memories")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(WidgetCalendarDateRules.weekdays, id: \.self) { weekday in
+                ForEach(Array(WidgetCalendarDateRules.weekdays(language: snapshot.displayLanguage).enumerated()), id: \.offset) { _, weekday in
                     Text(weekday)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -170,6 +181,7 @@ private struct MonthWidgetView: View {
 
     private var monthTitle: String {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: snapshot.displayLanguage == .japanese ? "ja_JP" : "en_US")
         formatter.dateFormat = "MMM yyyy"
         return formatter.string(from: snapshot.selectedMonth)
     }
@@ -201,10 +213,13 @@ private struct WidgetMonthCell: View {
                 }
 
             if cell.isInDisplayedMonth {
-                Text("\(cell.day)")
-                    .font(.system(size: isLarge ? 11 : 8, weight: .bold))
-                    .foregroundStyle(entry == nil ? Color.primary : Color.white)
-                    .padding(2)
+                WidgetCellOverlayLayer(
+                    day: cell.day,
+                    overlayStyle: entry?.overlayStyle ?? .default,
+                    usesCustomStyle: entry != nil,
+                    showsDate: true,
+                    isLarge: isLarge
+                )
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -220,7 +235,7 @@ private struct AccessoryInlineWidgetView: View {
     }
 
     private var accessoryText: String {
-        if WidgetCalendarDateRules.isJapaneseLocale {
+        if snapshot.displayLanguage == .japanese {
             return snapshot.todayEntry == nil ? "うちの子: 今日追加" : "うちの子: 登録済み"
         }
         return snapshot.todayEntry == nil ? "Pet Calendar: Add today" : "Pet Calendar: Saved"
@@ -253,38 +268,53 @@ private struct AccessoryRectangularWidgetView: View {
     let snapshot: WidgetPetCalendarSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(WidgetCalendarDateRules.isJapaneseLocale ? "今週" : "This Week")
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-
-            HStack(spacing: 3) {
-                ForEach(0..<weekDays.count, id: \.self) { index in
-                    weekDayColumn(weekDays[index])
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text(snapshot.displayLanguage == .japanese ? "今週" : "This Week")
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 2)
+                if snapshot.showsBranding {
+                    Text("Memories")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
+            }
+
+            weekRow { day in
+                Text(day.weekdaySymbol)
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            weekRow { day in
+                Text("\(day.day)")
+                    .font(.system(size: 10, weight: day.isToday ? .bold : .semibold))
+                    .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
+            }
+            weekRow { day in
+                statusMark(day)
+            }
+        }
+    }
+
+    private func weekRow<Content: View>(@ViewBuilder content: @escaping (WidgetWeekDayModel) -> Content) -> some View {
+        HStack(spacing: 2) {
+            ForEach(0..<weekDays.count, id: \.self) { index in
+                content(weekDays[index])
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 10)
+                    .opacity(weekDays[index].isFuture ? 0.48 : 1)
             }
         }
     }
 
     private var weekDays: [WidgetWeekDayModel] {
-        WidgetCalendarDateRules.week(containing: Date(), registeredEntryIDs: snapshot.entryIDs)
-    }
-
-    private func weekDayColumn(_ day: WidgetWeekDayModel) -> some View {
-        VStack(spacing: 1) {
-            Text(day.weekdaySymbol)
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Text("\(day.day)")
-                .font(.system(size: 10, weight: day.isToday ? .bold : .semibold))
-                .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
-            statusMark(day)
-        }
-        .frame(maxWidth: .infinity)
-        .opacity(day.isFuture ? 0.48 : 1)
-        .padding(.vertical, 1)
-        .background(day.isToday ? Color.accentColor.opacity(0.20) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        WidgetCalendarDateRules.week(
+            containing: Date(),
+            registeredEntryIDs: snapshot.entryIDs,
+            language: snapshot.displayLanguage
+        )
     }
 
     @ViewBuilder
@@ -306,6 +336,127 @@ private struct AccessoryRectangularWidgetView: View {
                 .fill(Color.secondary.opacity(0.38))
                 .frame(width: 5, height: 5)
         }
+    }
+}
+
+private struct WidgetCellOverlayLayer: View {
+    let day: Int
+    let overlayStyle: WidgetPetCalendarOverlayStyle
+    let usesCustomStyle: Bool
+    let showsDate: Bool
+    let isLarge: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let minSide = min(proxy.size.width, proxy.size.height)
+            let iconSize = min(max(minSide * 0.23, isLarge ? 14 : 10), isLarge ? 22 : 16)
+            let inset = max(minSide * 0.07, isLarge ? 3 : 2)
+            ZStack(alignment: .topLeading) {
+                if showsDate {
+                    Text("\(day)")
+                        .font(overlayStyle.font(size: isLarge ? 11 : 8, weight: .bold))
+                        .foregroundStyle(usesCustomStyle ? overlayStyle.textColor.color : (Color.primary))
+                        .shadow(color: usesCustomStyle ? Color.black.opacity(0.28) : .clear, radius: 1, y: 1)
+                        .padding(2)
+                }
+
+                ForEach(overlayItems.indices, id: \.self) { index in
+                    let item = overlayItems[index]
+                    WidgetOverlayIconView(
+                        symbolName: item.symbolName,
+                        color: overlayStyle.accentColor.color,
+                        size: iconSize
+                    )
+                    .position(position(for: item.corner, itemIndex: indexInCorner(index), iconSize: iconSize, inset: inset, size: proxy.size, reservesDateSpace: showsDate))
+                }
+            }
+        }
+    }
+
+    private var overlayItems: [WidgetOverlayViewItem] {
+        guard usesCustomStyle else {
+            return []
+        }
+        var items: [WidgetOverlayViewItem] = []
+        if let icon = overlayStyle.effectiveThemeIcon {
+            items.append(WidgetOverlayViewItem(corner: overlayStyle.themeIconCorner, symbolName: icon.symbolName))
+        }
+        if let icon = overlayStyle.effectiveWeatherIcon {
+            items.append(WidgetOverlayViewItem(corner: overlayStyle.weatherIconCorner, symbolName: icon.symbolName))
+        }
+        return items
+    }
+
+    private func indexInCorner(_ index: Int) -> Int {
+        let corner = overlayItems[index].corner
+        return overlayItems[..<index].filter { $0.corner == corner }.count
+    }
+
+    private func position(
+        for corner: WidgetPetCalendarOverlayCorner,
+        itemIndex: Int,
+        iconSize: CGFloat,
+        inset: CGFloat,
+        size: CGSize,
+        reservesDateSpace: Bool
+    ) -> CGPoint {
+        let spacing: CGFloat = 2
+        let stackOffset = CGFloat(itemIndex) * (iconSize + spacing)
+        let x: CGFloat
+        switch corner {
+        case .topLeft, .bottomLeft:
+            x = inset + iconSize / 2
+        case .topRight, .bottomRight:
+            x = size.width - inset - iconSize / 2
+        }
+
+        let y: CGFloat
+        switch corner {
+        case .topLeft:
+            y = inset + iconSize / 2 + (reservesDateSpace ? 12 : 0) + stackOffset
+        case .topRight:
+            y = inset + iconSize / 2 + stackOffset
+        case .bottomLeft, .bottomRight:
+            y = size.height - inset - iconSize / 2 - stackOffset
+        }
+
+        return CGPoint(x: x, y: y)
+    }
+}
+
+private struct WidgetOverlayViewItem {
+    var corner: WidgetPetCalendarOverlayCorner
+    var symbolName: String
+}
+
+private struct WidgetOverlayIconView: View {
+    let symbolName: String
+    let color: Color
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color.prefersDarkOverlayBackground ? Color.black.opacity(0.30) : Color.white.opacity(0.64))
+            Image(systemName: symbolName)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(color)
+                .padding(size * 0.25)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+private extension Color {
+    var prefersDarkOverlayBackground: Bool {
+        guard let components = UIColor(self).cgColor.components else {
+            return true
+        }
+        let red = components.indices.contains(0) ? components[0] : 1
+        let green = components.indices.contains(1) ? components[1] : red
+        let blue = components.indices.contains(2) ? components[2] : red
+        return (red * 0.299 + green * 0.587 + blue * 0.114) > 0.58
     }
 }
 
@@ -361,13 +512,48 @@ private struct WidgetPlacedImage: View {
 struct WidgetPetCalendarSnapshot: Codable, Hashable {
     var updatedAt: Date
     var selectedMonth: Date
+    var displayLanguage: WidgetPetCalendarDisplayLanguage
+    var showsBranding: Bool
     var entries: [WidgetPetCalendarEntry]
 
     static let placeholder = WidgetPetCalendarSnapshot(
         updatedAt: Date(),
         selectedMonth: Date(),
+        displayLanguage: .japanese,
+        showsBranding: true,
         entries: []
     )
+
+    private enum CodingKeys: String, CodingKey {
+        case updatedAt
+        case selectedMonth
+        case displayLanguage
+        case showsBranding
+        case entries
+    }
+
+    init(
+        updatedAt: Date,
+        selectedMonth: Date,
+        displayLanguage: WidgetPetCalendarDisplayLanguage = .japanese,
+        showsBranding: Bool = true,
+        entries: [WidgetPetCalendarEntry]
+    ) {
+        self.updatedAt = updatedAt
+        self.selectedMonth = selectedMonth
+        self.displayLanguage = displayLanguage
+        self.showsBranding = showsBranding
+        self.entries = entries
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
+        displayLanguage = try container.decodeIfPresent(WidgetPetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
+        showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
+        entries = try container.decode([WidgetPetCalendarEntry].self, forKey: .entries)
+    }
 
     var todayEntry: WidgetPetCalendarEntry? {
         entryByID[WidgetCalendarDateRules.id(for: Date())]
@@ -388,6 +574,7 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
     var thumbnailFileName: String
     var caption: String
     var photoPlacement: WidgetPhotoPlacement
+    var overlayStyle: WidgetPetCalendarOverlayStyle
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -395,6 +582,7 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
         case thumbnailFileName
         case caption
         case photoPlacement
+        case overlayStyle
     }
 
     init(from decoder: Decoder) throws {
@@ -404,6 +592,146 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
         thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(WidgetPhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+        overlayStyle = try container.decodeIfPresent(WidgetPetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default
+    }
+}
+
+enum WidgetPetCalendarDisplayLanguage: String, Codable, Hashable {
+    case japanese
+    case english
+}
+
+enum WidgetPetCalendarOverlayCorner: String, Codable, CaseIterable, Hashable {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+}
+
+enum WidgetPetCalendarThemeIcon: String, Codable, Hashable {
+    case walk
+    case outing
+    case meal
+    case nap
+    case hospital
+    case shampoo
+    case cafe
+    case home
+    case birthday
+
+    var symbolName: String {
+        switch self {
+        case .walk:
+            return "figure.walk"
+        case .outing:
+            return "suitcase"
+        case .meal:
+            return "fork.knife"
+        case .nap:
+            return "moon.zzz"
+        case .hospital:
+            return "cross.case"
+        case .shampoo:
+            return "sparkles"
+        case .cafe:
+            return "cup.and.saucer"
+        case .home:
+            return "house"
+        case .birthday:
+            return "birthday.cake"
+        }
+    }
+}
+
+enum WidgetPetCalendarWeatherIcon: String, Codable, Hashable {
+    case sunny
+    case cloudy
+    case rainy
+    case snowy
+
+    var symbolName: String {
+        switch self {
+        case .sunny:
+            return "sun.max"
+        case .cloudy:
+            return "cloud"
+        case .rainy:
+            return "cloud.rain"
+        case .snowy:
+            return "snowflake"
+        }
+    }
+}
+
+enum WidgetPetCalendarOverlayColorStyle: String, Codable, Hashable {
+    case white
+    case black
+    case navy
+    case blue
+    case softGray
+
+    var color: Color {
+        switch self {
+        case .white:
+            return .white
+        case .black:
+            return Color(red: 0.12, green: 0.12, blue: 0.12)
+        case .navy:
+            return Color(red: 0.13, green: 0.21, blue: 0.31)
+        case .blue:
+            return Color(red: 0.31, green: 0.50, blue: 0.64)
+        case .softGray:
+            return Color(red: 0.86, green: 0.89, blue: 0.92)
+        }
+    }
+}
+
+enum WidgetPetCalendarOverlayFontStyle: String, Codable, Hashable {
+    case rounded
+    case regular
+    case bold
+}
+
+struct WidgetPetCalendarOverlayStyle: Codable, Hashable {
+    var isThemeIconVisible: Bool
+    var themeIcon: WidgetPetCalendarThemeIcon?
+    var themeIconCorner: WidgetPetCalendarOverlayCorner
+    var isWeatherIconVisible: Bool
+    var weatherIcon: WidgetPetCalendarWeatherIcon?
+    var weatherIconCorner: WidgetPetCalendarOverlayCorner
+    var textColor: WidgetPetCalendarOverlayColorStyle
+    var accentColor: WidgetPetCalendarOverlayColorStyle
+    var fontStyle: WidgetPetCalendarOverlayFontStyle
+
+    static let `default` = WidgetPetCalendarOverlayStyle(
+        isThemeIconVisible: false,
+        themeIcon: nil,
+        themeIconCorner: .topRight,
+        isWeatherIconVisible: false,
+        weatherIcon: nil,
+        weatherIconCorner: .bottomRight,
+        textColor: .white,
+        accentColor: .white,
+        fontStyle: .rounded
+    )
+
+    var effectiveThemeIcon: WidgetPetCalendarThemeIcon? {
+        isThemeIconVisible ? (themeIcon ?? .walk) : nil
+    }
+
+    var effectiveWeatherIcon: WidgetPetCalendarWeatherIcon? {
+        isWeatherIconVisible ? (weatherIcon ?? .sunny) : nil
+    }
+
+    func font(size: CGFloat, weight: Font.Weight) -> Font {
+        switch fontStyle {
+        case .rounded:
+            return .system(size: size, weight: weight, design: .rounded)
+        case .regular:
+            return .system(size: size, weight: weight, design: .default)
+        case .bold:
+            return .system(size: size, weight: .bold, design: .default)
+        }
     }
 }
 
@@ -498,16 +826,19 @@ private struct WidgetWeekDayModel: Identifiable, Hashable {
 }
 
 private enum WidgetCalendarDateRules {
-    static let weekdays = ["S", "M", "T", "W", "T", "F", "S"]
-
     static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.firstWeekday = 1
         return calendar
     }
 
-    static var isJapaneseLocale: Bool {
-        Locale.current.language.languageCode?.identifier == "ja"
+    static func weekdays(language: WidgetPetCalendarDisplayLanguage) -> [String] {
+        switch language {
+        case .japanese:
+            return ["日", "月", "火", "水", "木", "金", "土"]
+        case .english:
+            return ["S", "M", "T", "W", "T", "F", "S"]
+        }
     }
 
     static func id(for date: Date) -> String {
@@ -525,9 +856,15 @@ private enum WidgetCalendarDateRules {
         return calendar.date(byAdding: .day, value: -leadingDays, to: start) ?? start
     }
 
-    static func week(containing date: Date, now: Date = Date(), registeredEntryIDs: Set<String>) -> [WidgetWeekDayModel] {
+    static func week(
+        containing date: Date,
+        now: Date = Date(),
+        registeredEntryIDs: Set<String>,
+        language: WidgetPetCalendarDisplayLanguage
+    ) -> [WidgetWeekDayModel] {
         let start = startOfWeek(containing: date)
         let todayID = id(for: now)
+        let weekdaySymbols = weekdays(language: language)
         return (0..<7).compactMap { offset in
             guard let day = calendar.date(byAdding: .day, value: offset, to: start) else {
                 return nil
@@ -537,7 +874,7 @@ private enum WidgetCalendarDateRules {
                 id: dayID,
                 date: day,
                 day: calendar.component(.day, from: day),
-                weekdaySymbol: weekdays[offset],
+                weekdaySymbol: weekdaySymbols[offset],
                 isToday: dayID == todayID,
                 isFuture: calendar.startOfDay(for: day) > calendar.startOfDay(for: now),
                 isRegistered: registeredEntryIDs.contains(dayID)

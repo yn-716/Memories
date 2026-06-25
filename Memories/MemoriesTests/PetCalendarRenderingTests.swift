@@ -23,10 +23,22 @@ final class PetCalendarRenderingTests: XCTestCase {
 
     func testRegisteredDaysProvideThumbnailsAndUnregisteredDaysUseDefaultDrawingPath() {
         let placement = PhotoPlacement(scale: 1.8, offsetX: 0.25, offsetY: -0.2)
+        let overlayStyle = PetCalendarOverlayStyle(
+            isThemeIconVisible: true,
+            themeIcon: .meal,
+            themeIconCorner: .topRight,
+            isWeatherIconVisible: true,
+            weatherIcon: .cloudy,
+            weatherIconCorner: .bottomRight,
+            textColor: .white,
+            accentColor: .white,
+            fontStyle: .rounded
+        )
         let entry = PetCalendarRenderEntry(
             date: date(year: 2026, month: 6, day: 20),
             thumbnail: makeImage(color: .blue),
-            photoPlacement: placement
+            photoPlacement: placement,
+            overlayStyle: overlayStyle
         )
         let renderer = PetCalendarRenderer(calendar: testCalendar)
 
@@ -43,6 +55,7 @@ final class PetCalendarRenderingTests: XCTestCase {
 
         XCTAssertEqual(image.size, CGSize(width: 700, height: 900))
         XCTAssertEqual(entry.photoPlacement, placement)
+        XCTAssertEqual(entry.overlayStyle, overlayStyle)
     }
 
     func testMonthGridMarksOutsideMonthSeparatelyFromUnregisteredDays() {

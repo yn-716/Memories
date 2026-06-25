@@ -68,6 +68,7 @@ struct PetCalendarRepository {
         image: UIImage?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
+        overlayStyle: PetCalendarOverlayStyle = .default,
         for date: Date,
         allowReplace: Bool = false,
         now: Date = Date()
@@ -117,6 +118,7 @@ struct PetCalendarRepository {
             thumbnailFileName: thumbnailFileName,
             caption: "",
             photoPlacement: photoPlacement.clamped,
+            overlayStyle: overlayStyle,
             createdAt: existing?.createdAt ?? nowDate,
             updatedAt: nowDate
         )
@@ -169,18 +171,26 @@ struct PetCalendarRepository {
         }.reduce(0, +)
     }
 
-    func writeWidgetSnapshot(entries: [PetCalendarDayEntry]? = nil, selectedMonth: Date = Date()) throws {
+    func writeWidgetSnapshot(
+        entries: [PetCalendarDayEntry]? = nil,
+        selectedMonth: Date = Date(),
+        displayLanguage: PetCalendarDisplayLanguage = .japanese,
+        showsBranding: Bool = true
+    ) throws {
         try ensureDirectories()
         let snapshot = PetCalendarWidgetSnapshot(
             updatedAt: Date(),
             selectedMonth: PetCalendarDateRules.monthStart(for: selectedMonth, calendar: calendar),
+            displayLanguage: displayLanguage,
+            showsBranding: showsBranding,
             entries: (entries ?? loadEntries()).map { entry in
                 PetCalendarWidgetEntry(
                     id: entry.id,
                     date: entry.date,
                     thumbnailFileName: entry.thumbnailFileName,
                     caption: entry.caption,
-                    photoPlacement: entry.photoPlacement
+                    photoPlacement: entry.photoPlacement,
+                    overlayStyle: entry.overlayStyle
                 )
             }
         )
@@ -288,7 +298,40 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
 
     var updatedAt: Date
     var selectedMonth: Date
+    var displayLanguage: PetCalendarDisplayLanguage
+    var showsBranding: Bool
     var entries: [PetCalendarWidgetEntry]
+
+    init(
+        updatedAt: Date,
+        selectedMonth: Date,
+        displayLanguage: PetCalendarDisplayLanguage = .japanese,
+        showsBranding: Bool = true,
+        entries: [PetCalendarWidgetEntry]
+    ) {
+        self.updatedAt = updatedAt
+        self.selectedMonth = selectedMonth
+        self.displayLanguage = displayLanguage
+        self.showsBranding = showsBranding
+        self.entries = entries
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case updatedAt
+        case selectedMonth
+        case displayLanguage
+        case showsBranding
+        case entries
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
+        displayLanguage = try container.decodeIfPresent(PetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
+        showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
+        entries = try container.decode([PetCalendarWidgetEntry].self, forKey: .entries)
+    }
 }
 
 struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
@@ -297,19 +340,22 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     var thumbnailFileName: String
     var caption: String
     var photoPlacement: PhotoPlacement
+    var overlayStyle: PetCalendarOverlayStyle
 
     init(
         id: String,
         date: Date,
         thumbnailFileName: String,
         caption: String = "",
-        photoPlacement: PhotoPlacement = .default
+        photoPlacement: PhotoPlacement = .default,
+        overlayStyle: PetCalendarOverlayStyle = .default
     ) {
         self.id = id
         self.date = date
         self.thumbnailFileName = thumbnailFileName
         self.caption = caption
         self.photoPlacement = photoPlacement.clamped
+        self.overlayStyle = overlayStyle
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -318,6 +364,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
         case thumbnailFileName
         case caption
         case photoPlacement
+        case overlayStyle
     }
 
     init(from decoder: Decoder) throws {
@@ -327,6 +374,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
         thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+        overlayStyle = try container.decodeIfPresent(PetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default
     }
 }
 

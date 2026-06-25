@@ -95,6 +95,32 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.entry(for: now)?.photoPlacement, placement)
     }
 
+    func testRepositoryStoresAndRestoresOverlayStyle() throws {
+        let repository = try makeRepository()
+        let now = date(year: 2026, month: 6, day: 25)
+        let overlayStyle = PetCalendarOverlayStyle(
+            isThemeIconVisible: true,
+            themeIcon: .cafe,
+            themeIconCorner: .bottomLeft,
+            isWeatherIconVisible: true,
+            weatherIcon: .rainy,
+            weatherIconCorner: .topRight,
+            textColor: .navy,
+            accentColor: .blue,
+            fontStyle: .bold
+        )
+
+        let entry = try repository.save(
+            image: makeImage(),
+            overlayStyle: overlayStyle,
+            for: now,
+            now: now
+        )
+
+        XCTAssertEqual(entry.overlayStyle, overlayStyle)
+        XCTAssertEqual(repository.entry(for: now)?.overlayStyle, overlayStyle)
+    }
+
     func testRepositoryClampsSavedPhotoPlacement() throws {
         let repository = try makeRepository()
         let now = date(year: 2026, month: 6, day: 25)
@@ -111,7 +137,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertEqual(entry.photoPlacement.offsetY, 1)
     }
 
-    func testDayEntryDecodesLegacyJSONWithoutPhotoPlacement() throws {
+    func testDayEntryDecodesLegacyJSONWithoutPhotoPlacementOrOverlayStyle() throws {
         let json = """
         {
           "id": "2026-06-25",
@@ -130,6 +156,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
 
         XCTAssertEqual(entry.caption, "legacy caption")
         XCTAssertEqual(entry.photoPlacement, .default)
+        XCTAssertEqual(entry.overlayStyle, .default)
     }
 
     func testRepositoryStoresResizedDisplayImageThumbnailAndStorageSize() throws {
@@ -164,7 +191,47 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
         XCTAssertEqual(snapshot.entries.first?.caption, "")
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)
+        XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
+        XCTAssertEqual(snapshot.displayLanguage, .japanese)
+        XCTAssertTrue(snapshot.showsBranding)
         XCTAssertFalse(snapshot.entries.first?.thumbnailFileName == entry.imageFileName)
+    }
+
+    func testWidgetSnapshotStoresDisplayLanguageBrandingAndOverlayStyle() throws {
+        let rootURL = makeTemporaryDirectory()
+        let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
+        let now = date(year: 2026, month: 6, day: 25)
+        let overlayStyle = PetCalendarOverlayStyle(
+            isThemeIconVisible: true,
+            themeIcon: .birthday,
+            themeIconCorner: .topRight,
+            isWeatherIconVisible: true,
+            weatherIcon: .snowy,
+            weatherIconCorner: .bottomRight,
+            textColor: .black,
+            accentColor: .softGray,
+            fontStyle: .regular
+        )
+        _ = try repository.save(image: makeImage(), overlayStyle: overlayStyle, for: now, now: now)
+
+        try repository.writeWidgetSnapshot(
+            entries: repository.loadEntries(),
+            selectedMonth: now,
+            displayLanguage: .english,
+            showsBranding: false
+        )
+
+        let snapshotURL = rootURL
+            .appendingPathComponent("PetCalendar/Widget", isDirectory: true)
+            .appendingPathComponent(PetCalendarWidgetSnapshot.fileName)
+        let data = try Data(contentsOf: snapshotURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
+
+        XCTAssertEqual(snapshot.displayLanguage, .english)
+        XCTAssertFalse(snapshot.showsBranding)
+        XCTAssertEqual(snapshot.entries.first?.overlayStyle, overlayStyle)
     }
 
     private func makeRepository() throws -> PetCalendarRepository {

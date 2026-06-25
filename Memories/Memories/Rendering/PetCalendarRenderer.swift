@@ -5,16 +5,19 @@ struct PetCalendarRenderEntry: Hashable {
     var date: Date
     var thumbnail: UIImage?
     var photoPlacement: PhotoPlacement = .default
+    var overlayStyle: PetCalendarOverlayStyle = .default
 
     static func == (lhs: PetCalendarRenderEntry, rhs: PetCalendarRenderEntry) -> Bool {
         PetCalendarDateRules.id(for: lhs.date) == PetCalendarDateRules.id(for: rhs.date)
             && lhs.thumbnail === rhs.thumbnail
             && lhs.photoPlacement == rhs.photoPlacement
+            && lhs.overlayStyle == rhs.overlayStyle
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(PetCalendarDateRules.id(for: date))
         hasher.combine(photoPlacement)
+        hasher.combine(overlayStyle)
         hasher.combine(thumbnail.map(ObjectIdentifier.init))
     }
 }
@@ -267,11 +270,16 @@ struct PetCalendarRenderer {
             todayPath.stroke()
         }
 
-        let numberColor: UIColor = entry == nil ? UIColor(hex: "#1F3447") : .white
+        if let entry {
+            drawOverlayIcons(entry.overlayStyle, in: rect)
+        }
+
+        let numberColor: UIColor = entry.map { $0.overlayStyle.textColor.uiColor } ?? UIColor(hex: "#1F3447")
+        let numberFont = entry.map { $0.overlayStyle.fontStyle.uiFont(size: 26, weight: .bold) } ?? .systemFont(ofSize: 26, weight: .bold)
         drawText(
             "\(cell.dayNumber)",
             in: CGRect(x: rect.minX + 12, y: rect.minY + 8, width: rect.width - 24, height: 30),
-            font: .systemFont(ofSize: 26, weight: .bold),
+            font: numberFont,
             color: numberColor.withAlphaComponent(cell.isFuture ? 0.38 : 0.94),
             alignment: .left
         )
@@ -290,6 +298,87 @@ struct PetCalendarRenderer {
     private func drawPaw(in rect: CGRect, alpha: CGFloat) {
         UIColor(hex: "#4F7FA3").withAlphaComponent(alpha).setFill()
         Self.drawPawPath(in: rect).fill()
+    }
+
+    private func drawOverlayIcons(_ style: PetCalendarOverlayStyle, in rect: CGRect) {
+        let icons = overlayIcons(for: style)
+        guard !icons.isEmpty else {
+            return
+        }
+
+        let iconSize = min(max(rect.width * 0.17, 24), 38)
+        let spacing: CGFloat = 6
+        let inset = max(10, rect.width * 0.06)
+        let grouped = Dictionary(grouping: icons, by: \.corner)
+
+        for corner in PetCalendarOverlayCorner.allCases {
+            let cornerIcons = grouped[corner] ?? []
+            for (index, icon) in cornerIcons.enumerated() {
+                let offset = CGFloat(index) * (iconSize + spacing)
+                let x: CGFloat
+                switch corner {
+                case .topLeft, .bottomLeft:
+                    x = rect.minX + inset
+                case .topRight, .bottomRight:
+                    x = rect.maxX - inset - iconSize
+                }
+
+                let y: CGFloat
+                switch corner {
+                case .topLeft:
+                    y = rect.minY + inset + 36 + offset
+                case .topRight:
+                    y = rect.minY + inset + offset
+                case .bottomLeft, .bottomRight:
+                    y = rect.maxY - inset - iconSize - offset
+                }
+
+                drawOverlayIcon(
+                    assetName: icon.assetName,
+                    symbolName: icon.symbolName,
+                    color: style.accentColor.uiColor,
+                    in: CGRect(x: x, y: y, width: iconSize, height: iconSize)
+                )
+            }
+        }
+    }
+
+    private func overlayIcons(for style: PetCalendarOverlayStyle) -> [CalendarOverlayIcon] {
+        var icons: [CalendarOverlayIcon] = []
+        if let themeIcon = style.effectiveThemeIcon {
+            icons.append(CalendarOverlayIcon(
+                corner: style.themeIconCorner,
+                assetName: themeIcon.assetName,
+                symbolName: themeIcon.symbolName
+            ))
+        }
+        if let weatherIcon = style.effectiveWeatherIcon {
+            icons.append(CalendarOverlayIcon(
+                corner: style.weatherIconCorner,
+                assetName: weatherIcon.assetName,
+                symbolName: weatherIcon.symbolName
+            ))
+        }
+        return icons
+    }
+
+    private func drawOverlayIcon(assetName: String, symbolName: String, color: UIColor, in rect: CGRect) {
+        let backgroundColor = color.prefersDarkOverlayBackground
+            ? UIColor.black.withAlphaComponent(0.30)
+            : UIColor.white.withAlphaComponent(0.58)
+        let path = UIBezierPath(ovalIn: rect)
+        backgroundColor.setFill()
+        path.fill()
+
+        guard let image = UIImage(named: assetName)?.withRenderingMode(.alwaysTemplate)
+            ?? UIImage(systemName: symbolName)?.withRenderingMode(.alwaysTemplate)
+        else {
+            return
+        }
+
+        color.withAlphaComponent(0.96).setFill()
+        image.withTintColor(color.withAlphaComponent(0.96), renderingMode: .alwaysTemplate)
+            .draw(in: rect.insetBy(dx: rect.width * 0.24, dy: rect.height * 0.24))
     }
 
     static func drawPawPath(in rect: CGRect) -> UIBezierPath {
@@ -338,5 +427,43 @@ struct PetCalendarRenderer {
             .paragraphStyle: paragraph
         ]
         NSString(string: text).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attributes, context: nil)
+    }
+}
+
+private struct CalendarOverlayIcon {
+    var corner: PetCalendarOverlayCorner
+    var assetName: String
+    var symbolName: String
+}
+
+private extension PetCalendarOverlayColorStyle {
+    var uiColor: UIColor {
+        UIColor(hex: hex)
+    }
+}
+
+private extension PetCalendarOverlayFontStyle {
+    func uiFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        switch self {
+        case .rounded:
+            return UIFontDescriptor
+                .preferredFontDescriptor(withTextStyle: .body)
+                .withDesign(.rounded)
+                .map { UIFont(descriptor: $0, size: size) } ?? .systemFont(ofSize: size, weight: weight)
+        case .regular:
+            return .systemFont(ofSize: size, weight: .semibold)
+        case .bold:
+            return .systemFont(ofSize: size, weight: .bold)
+        }
+    }
+}
+
+private extension UIColor {
+    var prefersDarkOverlayBackground: Bool {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        getRed(&red, green: &green, blue: &blue, alpha: nil)
+        return (red * 0.299 + green * 0.587 + blue * 0.114) > 0.58
     }
 }

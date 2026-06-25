@@ -43,6 +43,300 @@ struct PetCalendarSettings: Codable, Hashable {
     var selectedMonth: Date
 }
 
+enum PetCalendarOverlayCorner: String, Codable, CaseIterable, Identifiable, Hashable {
+    case topLeft
+    case topRight
+    case bottomLeft
+    case bottomRight
+
+    var id: String { rawValue }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch (self, language) {
+        case (.topLeft, .japanese):
+            return "左上"
+        case (.topRight, .japanese):
+            return "右上"
+        case (.bottomLeft, .japanese):
+            return "左下"
+        case (.bottomRight, .japanese):
+            return "右下"
+        case (.topLeft, .english):
+            return "Top Left"
+        case (.topRight, .english):
+            return "Top Right"
+        case (.bottomLeft, .english):
+            return "Bottom Left"
+        case (.bottomRight, .english):
+            return "Bottom Right"
+        }
+    }
+}
+
+enum PetCalendarThemeIcon: String, Codable, CaseIterable, Identifiable, Hashable {
+    case walk
+    case outing
+    case meal
+    case nap
+    case hospital
+    case shampoo
+    case cafe
+    case home
+    case birthday
+
+    var id: String { rawValue }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch (self, language) {
+        case (.walk, .japanese):
+            return "散歩"
+        case (.outing, .japanese):
+            return "お出かけ"
+        case (.meal, .japanese):
+            return "ごはん"
+        case (.nap, .japanese):
+            return "お昼寝"
+        case (.hospital, .japanese):
+            return "病院"
+        case (.shampoo, .japanese):
+            return "シャンプー"
+        case (.cafe, .japanese):
+            return "カフェ"
+        case (.home, .japanese):
+            return "おうち"
+        case (.birthday, .japanese):
+            return "誕生日"
+        case (.walk, .english):
+            return "Walk"
+        case (.outing, .english):
+            return "Outing"
+        case (.meal, .english):
+            return "Meal"
+        case (.nap, .english):
+            return "Nap"
+        case (.hospital, .english):
+            return "Vet"
+        case (.shampoo, .english):
+            return "Bath"
+        case (.cafe, .english):
+            return "Cafe"
+        case (.home, .english):
+            return "Home"
+        case (.birthday, .english):
+            return "Birthday"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .walk:
+            return "figure.walk"
+        case .outing:
+            return "suitcase"
+        case .meal:
+            return "fork.knife"
+        case .nap:
+            return "moon.zzz"
+        case .hospital:
+            return "cross.case"
+        case .shampoo:
+            return "sparkles"
+        case .cafe:
+            return "cup.and.saucer"
+        case .home:
+            return "house"
+        case .birthday:
+            return "birthday.cake"
+        }
+    }
+
+    var assetName: String {
+        switch self {
+        case .walk:
+            return "theme_walk"
+        case .outing:
+            return "theme_travel"
+        case .meal:
+            return "theme_food"
+        case .nap:
+            return "theme_nap_dog"
+        case .hospital:
+            return "theme_hospital"
+        case .shampoo:
+            return "theme_bath"
+        case .cafe:
+            return "theme_cafe"
+        case .home:
+            return "theme_home"
+        case .birthday:
+            return "theme_birthday"
+        }
+    }
+}
+
+enum PetCalendarWeatherIcon: String, Codable, CaseIterable, Identifiable, Hashable {
+    case sunny
+    case cloudy
+    case rainy
+    case snowy
+
+    var id: String { rawValue }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch (self, language) {
+        case (.sunny, .japanese):
+            return "晴れ"
+        case (.cloudy, .japanese):
+            return "くもり"
+        case (.rainy, .japanese):
+            return "雨"
+        case (.snowy, .japanese):
+            return "雪"
+        case (.sunny, .english):
+            return "Sunny"
+        case (.cloudy, .english):
+            return "Cloudy"
+        case (.rainy, .english):
+            return "Rain"
+        case (.snowy, .english):
+            return "Snow"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .sunny:
+            return "sun.max"
+        case .cloudy:
+            return "cloud"
+        case .rainy:
+            return "cloud.rain"
+        case .snowy:
+            return "snowflake"
+        }
+    }
+
+    var assetName: String {
+        switch self {
+        case .sunny:
+            return "weather_sunny"
+        case .cloudy:
+            return "weather_cloudy"
+        case .rainy:
+            return "weather_rain"
+        case .snowy:
+            return "weather_snow"
+        }
+    }
+}
+
+enum PetCalendarOverlayColorStyle: String, Codable, CaseIterable, Identifiable, Hashable {
+    case white
+    case black
+    case navy
+    case blue
+    case softGray
+
+    var id: String { rawValue }
+
+    var hex: String {
+        switch self {
+        case .white:
+            return "#FFFFFF"
+        case .black:
+            return "#1F1F1F"
+        case .navy:
+            return "#20364F"
+        case .blue:
+            return "#4F7FA3"
+        case .softGray:
+            return "#DCE4EA"
+        }
+    }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch (self, language) {
+        case (.white, .japanese):
+            return "白"
+        case (.black, .japanese):
+            return "黒"
+        case (.navy, .japanese):
+            return "ネイビー"
+        case (.blue, .japanese):
+            return "ブルー"
+        case (.softGray, .japanese):
+            return "ソフトグレー"
+        case (.white, .english):
+            return "White"
+        case (.black, .english):
+            return "Black"
+        case (.navy, .english):
+            return "Navy"
+        case (.blue, .english):
+            return "Blue"
+        case (.softGray, .english):
+            return "Soft Gray"
+        }
+    }
+}
+
+enum PetCalendarOverlayFontStyle: String, Codable, CaseIterable, Identifiable, Hashable {
+    case rounded
+    case regular
+    case bold
+
+    var id: String { rawValue }
+
+    func displayName(language: ResolvedAppLanguage) -> String {
+        switch (self, language) {
+        case (.rounded, .japanese):
+            return "丸ゴシック"
+        case (.regular, .japanese):
+            return "標準"
+        case (.bold, .japanese):
+            return "太字"
+        case (.rounded, .english):
+            return "Rounded"
+        case (.regular, .english):
+            return "Regular"
+        case (.bold, .english):
+            return "Bold"
+        }
+    }
+}
+
+struct PetCalendarOverlayStyle: Codable, Hashable {
+    var isThemeIconVisible: Bool
+    var themeIcon: PetCalendarThemeIcon?
+    var themeIconCorner: PetCalendarOverlayCorner
+    var isWeatherIconVisible: Bool
+    var weatherIcon: PetCalendarWeatherIcon?
+    var weatherIconCorner: PetCalendarOverlayCorner
+    var textColor: PetCalendarOverlayColorStyle
+    var accentColor: PetCalendarOverlayColorStyle
+    var fontStyle: PetCalendarOverlayFontStyle
+
+    static let `default` = PetCalendarOverlayStyle(
+        isThemeIconVisible: false,
+        themeIcon: nil,
+        themeIconCorner: .topRight,
+        isWeatherIconVisible: false,
+        weatherIcon: nil,
+        weatherIconCorner: .bottomRight,
+        textColor: .white,
+        accentColor: .white,
+        fontStyle: .rounded
+    )
+
+    var effectiveThemeIcon: PetCalendarThemeIcon? {
+        isThemeIconVisible ? (themeIcon ?? .walk) : nil
+    }
+
+    var effectiveWeatherIcon: PetCalendarWeatherIcon? {
+        isWeatherIconVisible ? (weatherIcon ?? .sunny) : nil
+    }
+}
+
 struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
@@ -50,6 +344,7 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
     var thumbnailFileName: String
     var caption: String
     var photoPlacement: PhotoPlacement
+    var overlayStyle: PetCalendarOverlayStyle
     var createdAt: Date
     var updatedAt: Date
 
@@ -60,6 +355,7 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
         thumbnailFileName: String,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
+        overlayStyle: PetCalendarOverlayStyle = .default,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -69,6 +365,7 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
         self.thumbnailFileName = thumbnailFileName
         self.caption = caption
         self.photoPlacement = photoPlacement.clamped
+        self.overlayStyle = overlayStyle
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -80,6 +377,7 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
         case thumbnailFileName
         case caption
         case photoPlacement
+        case overlayStyle
         case createdAt
         case updatedAt
     }
@@ -92,6 +390,7 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
         thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
+        overlayStyle = try container.decodeIfPresent(PetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }

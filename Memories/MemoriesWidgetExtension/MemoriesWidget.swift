@@ -60,6 +60,7 @@ private struct MemoriesWidgetView: View {
                 WidgetAquaBackground()
             }
             .unredacted()
+            .widgetAccentable(false)
     }
 
     @ViewBuilder
@@ -114,7 +115,7 @@ private struct WidgetWatermark: View {
                 .allowsTightening(true)
                 .fixedSize(horizontal: true, vertical: false)
         }
-        .foregroundStyle(Color.primary.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.70))
+        .foregroundStyle(WidgetCalendarColors.text.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.78))
         .padding(.horizontal, compact ? 5 : 7)
         .padding(.vertical, compact ? 3 : 4)
         .background {
@@ -142,10 +143,11 @@ private struct TodayWidgetView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(WidgetCalendarDateRules.dateTitle(for: Date(), language: snapshot.displayLanguage))
                         .font(.subheadline.weight(.bold))
+                        .foregroundStyle(WidgetCalendarColors.text)
                         .lineLimit(1)
                     Text(WidgetCalendarDateRules.weekdayTitle(for: Date(), language: snapshot.displayLanguage))
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetCalendarColors.mutedText)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
@@ -164,7 +166,7 @@ private struct TodayWidgetView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 } else if snapshot.todayEntry?.overlayStyle.effectiveWeatherIcon == nil {
                     WidgetPawShape()
-                        .fill(Color.secondary.opacity(0.22))
+                        .fill(WidgetCalendarColors.paw.opacity(0.28))
                         .frame(width: 44, height: 44)
                 }
 
@@ -200,6 +202,7 @@ private struct MonthWidgetView: View {
             HStack {
                 Text(monthTitle)
                     .font(.headline.weight(.bold))
+                    .foregroundStyle(WidgetCalendarColors.text)
                     .lineLimit(1)
                 Spacer()
                 if snapshot.showsBranding {
@@ -211,7 +214,7 @@ private struct MonthWidgetView: View {
                 ForEach(Array(WidgetCalendarDateRules.weekdays(language: snapshot.displayLanguage).enumerated()), id: \.offset) { _, weekday in
                     Text(weekday)
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetCalendarColors.mutedText)
                         .frame(maxWidth: .infinity)
                 }
 
@@ -237,6 +240,7 @@ private struct WeekWidgetView: View {
             HStack(spacing: 6) {
                 Text(WidgetCalendarDateRules.weekTitle(for: Date(), language: snapshot.displayLanguage))
                     .font(.headline.weight(.bold))
+                    .foregroundStyle(WidgetCalendarColors.text)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if snapshot.showsBranding {
@@ -273,7 +277,7 @@ private struct WidgetWeekDayCard: View {
         VStack(spacing: 3) {
             Text(day.weekdaySymbol)
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetCalendarColors.mutedText)
                 .frame(height: 10)
 
             ZStack(alignment: .topLeading) {
@@ -283,7 +287,7 @@ private struct WidgetWeekDayCard: View {
                             WidgetPlacedImage(image: image, placement: entry.photoPlacement)
                         } else if !hasWeatherIcon {
                             WidgetPawShape()
-                                .fill(Color.secondary.opacity(day.isFuture ? 0.10 : 0.18))
+                                .fill(WidgetCalendarColors.paw.opacity(day.isFuture ? 0.12 : 0.24))
                                 .padding(8)
                         }
                     }
@@ -303,7 +307,7 @@ private struct WidgetWeekDayCard: View {
 
                 Text("\(day.day)")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(hasPhoto ? Color.white : Color.primary)
+                    .foregroundStyle(hasPhoto ? Color.white : WidgetCalendarColors.text)
                     .shadow(color: hasPhoto ? Color.black.opacity(0.35) : .clear, radius: 1, y: 1)
                     .padding(3)
             }
@@ -336,7 +340,7 @@ private struct WidgetMonthCell: View {
                         WidgetPlacedImage(image: image, placement: entry.photoPlacement)
                     } else if cell.isInDisplayedMonth, !hasWeatherIcon {
                         WidgetPawShape()
-                            .fill(Color.secondary.opacity(0.16))
+                            .fill(WidgetCalendarColors.paw.opacity(0.23))
                             .padding(isLarge ? 7 : 4)
                     }
                 }
@@ -357,7 +361,7 @@ private struct WidgetMonthCell: View {
             if cell.isInDisplayedMonth {
                 Text("\(cell.day)")
                     .font(.system(size: isLarge ? 11 : 8, weight: .bold))
-                    .foregroundStyle(hasPhoto ? Color.white : Color.primary)
+                    .foregroundStyle(hasPhoto ? Color.white : WidgetCalendarColors.text)
                     .shadow(color: hasPhoto ? Color.black.opacity(0.32) : .clear, radius: 1, y: 1)
                     .padding(2)
             }
@@ -456,7 +460,7 @@ private struct AccessoryCircularWidgetView: View {
             } else {
                 AccessoryWidgetBackground()
                 WidgetPawShape()
-                    .fill(Color.secondary.opacity(0.48))
+                    .fill(WidgetCalendarColors.paw.opacity(0.48))
                     .padding(12)
             }
 
@@ -470,7 +474,7 @@ private struct AccessoryCircularWidgetView: View {
                     .font(.system(size: 7, weight: .semibold))
                     .lineLimit(1)
             }
-            .foregroundStyle(featuredEntry == nil ? Color.primary : Color.white)
+            .foregroundStyle(featuredEntry == nil ? WidgetCalendarColors.text : Color.white)
             .shadow(color: featuredEntry == nil ? .clear : Color.black.opacity(0.34), radius: 1, y: 1)
         }
     }
@@ -492,6 +496,7 @@ private struct AccessoryRectangularWidgetView: View {
                 HStack(spacing: 4) {
                     Text(WidgetCalendarDateRules.compactWeekTitle(for: Date(), language: snapshot.displayLanguage))
                         .font(.caption2.weight(.semibold))
+                        .foregroundStyle(WidgetCalendarColors.text)
                         .lineLimit(1)
                     Spacer(minLength: 2)
                     if snapshot.showsBranding {
@@ -502,12 +507,12 @@ private struct AccessoryRectangularWidgetView: View {
                 weekRow { day in
                     Text(day.weekdaySymbol)
                         .font(.system(size: 7, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WidgetCalendarColors.mutedText)
                 }
                 weekRow { day in
                     Text("\(day.day)")
                         .font(.system(size: 9, weight: day.isToday ? .bold : .semibold))
-                        .foregroundStyle(day.isFuture ? Color.secondary.opacity(0.55) : Color.primary)
+                        .foregroundStyle(day.isFuture ? WidgetCalendarColors.mutedText.opacity(0.55) : WidgetCalendarColors.text)
                 }
                 weekRow { day in
                     statusMark(day)
@@ -529,7 +534,7 @@ private struct AccessoryRectangularWidgetView: View {
             ZStack {
                 WidgetAquaSurface(cornerRadius: 6)
                 WidgetPawShape()
-                    .fill(Color.secondary.opacity(0.36))
+                    .fill(WidgetCalendarColors.paw.opacity(0.36))
                     .padding(9)
             }
         }
@@ -563,7 +568,7 @@ private struct AccessoryRectangularWidgetView: View {
         if day.isFuture {
             Text("-")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary.opacity(0.55))
+                .foregroundStyle(WidgetCalendarColors.mutedText.opacity(0.55))
         } else if day.isRegistered {
             Image(systemName: day.isToday ? "checkmark.circle.fill" : "checkmark")
                 .font(.system(size: 9, weight: .bold))
@@ -574,13 +579,16 @@ private struct AccessoryRectangularWidgetView: View {
                 .frame(width: 7, height: 7)
         } else {
             Circle()
-                .fill(Color.secondary.opacity(0.38))
+                .fill(WidgetCalendarColors.mutedText.opacity(0.38))
                 .frame(width: 5, height: 5)
         }
     }
 }
 
 private enum WidgetCalendarColors {
+    static let text = Color(red: 0.10, green: 0.17, blue: 0.24)
+    static let mutedText = Color(red: 0.34, green: 0.45, blue: 0.54)
+    static let paw = Color(red: 0.58, green: 0.68, blue: 0.76)
     static let registeredFrame = Color(red: 0.56, green: 0.78, blue: 0.93)
 }
 
@@ -765,7 +773,9 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
     }
 
     var entryByID: [String: WidgetPetCalendarEntry] {
-        Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        entries.reduce(into: [:]) { result, entry in
+            result[entry.id] = entry
+        }
     }
 
     var entryIDs: Set<String> {

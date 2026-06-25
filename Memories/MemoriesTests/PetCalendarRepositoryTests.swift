@@ -141,6 +141,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
 
         XCTAssertNil(snapshot.entries.first?.thumbnailFileName)
+        XCTAssertNil(snapshot.entries.first?.imageFileName)
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, overlayStyle)
     }
 
@@ -211,6 +212,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
 
         XCTAssertEqual(snapshot.entries.count, 1)
+        XCTAssertEqual(snapshot.entries.first?.imageFileName, entry.imageFileName)
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
         XCTAssertEqual(snapshot.entries.first?.caption, "")
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)

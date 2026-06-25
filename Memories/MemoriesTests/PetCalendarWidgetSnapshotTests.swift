@@ -41,6 +41,7 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
 
         XCTAssertEqual(snapshot.entries.first?.id, "2026-06-25")
+        XCTAssertEqual(snapshot.entries.first?.imageFileName, entry.imageFileName)
         XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
         XCTAssertEqual(snapshot.entries.first?.caption, "")
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, placement)

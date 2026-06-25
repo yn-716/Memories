@@ -203,6 +203,7 @@ struct PetCalendarRepository {
                 PetCalendarWidgetEntry(
                     id: entry.id,
                     date: entry.date,
+                    imageFileName: entry.imageFileName,
                     thumbnailFileName: entry.thumbnailFileName,
                     caption: entry.caption,
                     photoPlacement: entry.photoPlacement,
@@ -257,6 +258,7 @@ struct PetCalendarRepository {
         try createProtectedDirectory(at: imagesDirectory)
         try createProtectedDirectory(at: thumbnailsDirectory)
         try createProtectedDirectory(at: widgetDirectory)
+        protectExistingItemsIfPossible(in: calendarDirectory)
         protectExistingItemsIfPossible(in: imagesDirectory)
         protectExistingItemsIfPossible(in: thumbnailsDirectory)
         protectExistingItemsIfPossible(in: widgetDirectory)
@@ -362,6 +364,7 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
 struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
+    var imageFileName: String?
     var thumbnailFileName: String?
     var caption: String
     var photoPlacement: PhotoPlacement
@@ -370,6 +373,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     init(
         id: String,
         date: Date,
+        imageFileName: String? = nil,
         thumbnailFileName: String?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
@@ -377,6 +381,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     ) {
         self.id = id
         self.date = date
+        self.imageFileName = imageFileName
         self.thumbnailFileName = thumbnailFileName
         self.caption = caption
         self.photoPlacement = photoPlacement.clamped
@@ -386,6 +391,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id
         case date
+        case imageFileName
         case thumbnailFileName
         case caption
         case photoPlacement
@@ -396,6 +402,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
+        imageFileName = try container.decodeIfPresent(String.self, forKey: .imageFileName)
         thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped

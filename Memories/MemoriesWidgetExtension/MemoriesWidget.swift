@@ -12,7 +12,7 @@ struct MemoriesWidgetEntry: TimelineEntry {
 
 struct MemoriesWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> MemoriesWidgetEntry {
-        MemoriesWidgetEntry(date: Date(), snapshot: .placeholder)
+        MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load())
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MemoriesWidgetEntry) -> Void) {
@@ -59,6 +59,7 @@ private struct MemoriesWidgetView: View {
             .containerBackground(for: .widget) {
                 WidgetAquaBackground()
             }
+            .unredacted()
     }
 
     @ViewBuilder
@@ -775,6 +776,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
 struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
+    var imageFileName: String?
     var thumbnailFileName: String?
     var caption: String
     var photoPlacement: WidgetPhotoPlacement
@@ -783,6 +785,7 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
     private enum CodingKeys: String, CodingKey {
         case id
         case date
+        case imageFileName
         case thumbnailFileName
         case caption
         case photoPlacement
@@ -793,6 +796,7 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
+        imageFileName = try container.decodeIfPresent(String.self, forKey: .imageFileName)
         thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(WidgetPhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
@@ -1065,15 +1069,28 @@ private enum WidgetPetCalendarSnapshotStore {
 
     static func thumbnail(for entry: WidgetPetCalendarEntry) -> UIImage? {
         guard
-            let directory = calendarDirectory,
-            let thumbnailFileName = entry.thumbnailFileName
+            let directory = calendarDirectory
         else {
             return nil
         }
-        let thumbnailURL = directory
-            .appendingPathComponent("Thumbnails", isDirectory: true)
-            .appendingPathComponent(thumbnailFileName)
-        return UIImage(contentsOfFile: thumbnailURL.path)
+
+        let thumbnailURL = entry.thumbnailFileName.map {
+            directory
+                .appendingPathComponent("Thumbnails", isDirectory: true)
+                .appendingPathComponent($0)
+        }
+        let imageURL = entry.imageFileName.map {
+            directory
+                .appendingPathComponent("Images", isDirectory: true)
+                .appendingPathComponent($0)
+        }
+
+        for url in [thumbnailURL, imageURL].compactMap({ $0 }) {
+            if let image = UIImage(contentsOfFile: url.path) {
+                return image
+            }
+        }
+        return nil
     }
 
     private static var sharedDirectory: URL? {

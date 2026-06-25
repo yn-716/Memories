@@ -242,19 +242,7 @@ struct PetCalendarRenderer {
 
         let weekdayTop = content.minY + 124
         let gridTop = weekdayTop + 70
-        let cellWidth = content.width / 7
         let weekdays = PetCalendarDateRules.weekdaySymbols(language: configuration.displayLanguage)
-
-        for index in 0..<7 {
-            drawText(
-                weekdays[index],
-                in: CGRect(x: content.minX + CGFloat(index) * cellWidth, y: weekdayTop, width: cellWidth, height: 48),
-                font: .systemFont(ofSize: 30, weight: .semibold),
-                color: UIColor(hex: "#4F7FA3"),
-                alignment: .center
-            )
-        }
-
         let entriesByID = Dictionary(uniqueKeysWithValues: configuration.entries.map {
             (PetCalendarDateRules.id(for: $0.date, calendar: calendar), $0)
         })
@@ -264,18 +252,38 @@ struct PetCalendarRenderer {
             calendar: calendar
         )
         let rowCount = max(1, cells.count / 7)
-        let gridHeight = content.height - 260
-        let cellHeight = gridHeight / CGFloat(rowCount)
+        let columnSpacing: CGFloat = 8
+        let rowSpacing: CGFloat = 8
+        let cellWidth = (content.width - columnSpacing * 6) / 7
+        let availableGridHeight = max(1, content.height - 260)
+        let maxCellHeight = (availableGridHeight - rowSpacing * CGFloat(rowCount - 1)) / CGFloat(rowCount)
+        let targetCellHeight = cellWidth / PetCalendarGridMetrics.cellAspectRatio(forRowCount: rowCount)
+        let cellHeight = min(maxCellHeight, targetCellHeight)
+
+        for index in 0..<7 {
+            drawText(
+                weekdays[index],
+                in: CGRect(
+                    x: content.minX + CGFloat(index) * (cellWidth + columnSpacing),
+                    y: weekdayTop,
+                    width: cellWidth,
+                    height: 48
+                ),
+                font: .systemFont(ofSize: 30, weight: .semibold),
+                color: UIColor(hex: "#4F7FA3"),
+                alignment: .center
+            )
+        }
 
         for (index, cell) in cells.enumerated() {
             let row = index / 7
             let column = index % 7
             let rect = CGRect(
-                x: content.minX + CGFloat(column) * cellWidth,
-                y: gridTop + CGFloat(row) * cellHeight,
+                x: content.minX + CGFloat(column) * (cellWidth + columnSpacing),
+                y: gridTop + CGFloat(row) * (cellHeight + rowSpacing),
                 width: cellWidth,
                 height: cellHeight
-            ).insetBy(dx: 4, dy: 4)
+            )
             drawCell(cell, entry: entriesByID[cell.id], in: rect, context: context)
         }
     }

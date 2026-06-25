@@ -48,15 +48,45 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
+        XCTAssertEqual(snapshot.renderedImageSets.count, 2)
         let renderedFileNames = [
             try XCTUnwrap(snapshot.smallImageFileName),
             try XCTUnwrap(snapshot.mediumImageFileName),
             try XCTUnwrap(snapshot.largeImageFileName)
         ]
-        for fileName in renderedFileNames {
+        let allRenderedFileNames = snapshot.renderedImageSets.flatMap(\.fileNames)
+        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[0]))
+        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[1]))
+        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[2]))
+        for fileName in allRenderedFileNames {
             let url = repository.widgetDirectoryURL.appendingPathComponent(fileName)
+            XCTAssertTrue(fileName.hasPrefix("pet-calendar-widget-"))
+            XCTAssertTrue(fileName.hasSuffix(".jpg"))
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
             XCTAssertGreaterThan((try? Data(contentsOf: url).count) ?? 0, 1_000)
+        }
+
+        try repository.writeWidgetSnapshot(
+            entries: repository.loadEntries(),
+            selectedMonth: now,
+            displayLanguage: .english,
+            showsBranding: false
+        )
+        let updatedData = try Data(contentsOf: snapshotURL)
+        let updatedSnapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: updatedData)
+        let updatedRenderedFileNames = [
+            try XCTUnwrap(updatedSnapshot.smallImageFileName),
+            try XCTUnwrap(updatedSnapshot.mediumImageFileName),
+            try XCTUnwrap(updatedSnapshot.largeImageFileName)
+        ]
+        let updatedAllRenderedFileNames = updatedSnapshot.renderedImageSets.flatMap(\.fileNames)
+
+        XCTAssertNotEqual(renderedFileNames, updatedRenderedFileNames)
+        for fileName in allRenderedFileNames {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: repository.widgetDirectoryURL.appendingPathComponent(fileName).path))
+        }
+        for fileName in updatedAllRenderedFileNames {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: repository.widgetDirectoryURL.appendingPathComponent(fileName).path))
         }
         XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)
         let thumbnailURL = try XCTUnwrap(repository.thumbnailURL(for: entry))
@@ -88,6 +118,7 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot.smallImageFileName)
         XCTAssertNil(snapshot.mediumImageFileName)
         XCTAssertNil(snapshot.largeImageFileName)
+        XCTAssertTrue(snapshot.renderedImageSets.isEmpty)
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
     }

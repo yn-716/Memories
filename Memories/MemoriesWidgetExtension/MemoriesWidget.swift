@@ -22,7 +22,14 @@ struct MemoriesWidgetProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MemoriesWidgetEntry>) -> Void) {
         let entry = makeEntry(for: context)
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
+        let now = Date()
+        let periodicUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: now) ?? now.addingTimeInterval(900)
+        let nextDayUpdate = Calendar.current.nextDate(
+            after: now,
+            matching: DateComponents(hour: 0, minute: 1),
+            matchingPolicy: .nextTime
+        ) ?? periodicUpdate
+        let nextUpdate = min(periodicUpdate, nextDayUpdate)
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
     }
 
@@ -122,557 +129,9 @@ private struct WidgetFallbackView: View {
     }
 }
 
-private struct WidgetWatermark: View {
-    @Environment(\.widgetRenderingMode) private var widgetRenderingMode
-    var compact = false
-
-    var body: some View {
-        let iconSide: CGFloat = compact ? 11 : 14
-        let label = "Memories Pet Life"
-        let materialTint = widgetRenderingMode == .vibrant ? 0.06 : 0.14
-
-        HStack(spacing: compact ? 3 : 5) {
-            Image("watermark_app_icon")
-                .resizable()
-                .scaledToFill()
-                .frame(width: iconSide, height: iconSide)
-                .clipShape(RoundedRectangle(cornerRadius: iconSide * 0.18, style: .continuous))
-                .opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.82)
-
-            Text(label)
-                .font(.system(size: compact ? 7 : 9, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.45)
-                .allowsTightening(true)
-                .fixedSize(horizontal: true, vertical: false)
-        }
-        .foregroundStyle(WidgetCalendarColors.text.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.78))
-        .padding(.horizontal, compact ? 5 : 7)
-        .padding(.vertical, compact ? 3 : 4)
-        .background {
-            Capsule(style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay {
-                    Capsule(style: .continuous)
-                        .fill(Color.black.opacity(materialTint))
-                }
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(widgetRenderingMode == .vibrant ? 0.28 : 0.32), lineWidth: 0.6)
-        }
-        .widgetAccentable(false)
-    }
-}
-
-private struct TodayWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-
-    var body: some View {
-        let displayEntry = snapshot.todayEntry ?? snapshot.featuredEntry
-        let displayDate = displayEntry?.date ?? Date()
-        let displayImage = displayEntry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) }
-        let usesPhoto = displayImage != nil
-
-        ZStack(alignment: .topLeading) {
-            WidgetAquaSurface(cornerRadius: 14)
-
-            if let displayImage {
-                WidgetPlacedImage(image: displayImage, placement: displayEntry?.photoPlacement ?? .default)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            } else if displayEntry?.overlayStyle.effectiveWeatherIcon == nil {
-                WidgetPawShape()
-                    .fill(WidgetCalendarColors.paw.opacity(0.28))
-                    .frame(width: 54, height: 54)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            if let displayEntry {
-                WidgetWeatherIconLayer(
-                    style: displayEntry.overlayStyle,
-                    usesPhotoBackground: usesPhoto
-                )
-            }
-
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(usesPhoto ? 0.36 : 0.00),
-                    Color.black.opacity(0.00)
-                ],
-                startPoint: .top,
-                endPoint: .center
-            )
-            .allowsHitTesting(false)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(WidgetCalendarDateRules.dateTitle(for: displayDate, language: snapshot.displayLanguage))
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(usesPhoto ? Color.white : WidgetCalendarColors.text)
-                    .shadow(color: usesPhoto ? Color.black.opacity(0.38) : .clear, radius: 1, y: 1)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                Text(WidgetCalendarDateRules.weekdayTitle(for: displayDate, language: snapshot.displayLanguage))
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .foregroundStyle(usesPhoto ? Color.white.opacity(0.88) : WidgetCalendarColors.mutedText)
-                    .shadow(color: usesPhoto ? Color.black.opacity(0.32) : .clear, radius: 1, y: 1)
-                    .lineLimit(1)
-            }
-            .padding(10)
-
-            if snapshot.showsBranding {
-                VStack {
-                    Spacer()
-                    HStack {
-                        WidgetWatermark(compact: true)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(8)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(displayEntry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.6)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct MonthWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-    let isLarge: Bool
-
-    var body: some View {
-        let cells = WidgetCalendarDateRules.monthGrid(for: snapshot.selectedMonth)
-        let rows = calendarRows(from: cells)
-        let rowCount = max(1, rows.count)
-        let entriesByID = snapshot.entryByID
-
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(monthTitle)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(WidgetCalendarColors.text)
-                    .lineLimit(1)
-                Spacer()
-                if snapshot.showsBranding {
-                    WidgetWatermark()
-                }
-            }
-
-            VStack(spacing: 3) {
-                HStack(spacing: 3) {
-                    ForEach(Array(WidgetCalendarDateRules.weekdays(language: snapshot.displayLanguage).enumerated()), id: \.offset) { _, weekday in
-                        Text(weekday)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(WidgetCalendarColors.mutedText)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 3) {
-                        ForEach(row, id: \.id) { cell in
-                            let entry = entriesByID[cell.id]
-                            WidgetMonthCell(
-                                cell: cell,
-                                entry: entry,
-                                image: entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) },
-                                isLarge: isLarge,
-                                rowCount: rowCount
-                            )
-                            .frame(maxWidth: .infinity)
-                        }
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var monthTitle: String {
-        WidgetCalendarDateRules.monthTitle(for: snapshot.selectedMonth, language: snapshot.displayLanguage)
-    }
-
-    private func calendarRows(from cells: [WidgetMonthCellModel]) -> [[WidgetMonthCellModel]] {
-        stride(from: 0, to: cells.count, by: 7).map { start in
-            Array(cells[start..<min(start + 7, cells.count)])
-        }
-    }
-}
-
-private struct WeekWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-
-    var body: some View {
-        let days = weekDays
-        let entriesByID = snapshot.entryByID
-
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text(WidgetCalendarDateRules.weekTitle(for: Date(), language: snapshot.displayLanguage))
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(WidgetCalendarColors.text)
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                if snapshot.showsBranding {
-                    WidgetWatermark(compact: true)
-                }
-            }
-
-            HStack(spacing: 4) {
-                ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
-                    let entry = entriesByID[day.id]
-                    WidgetWeekDayCard(
-                        day: day,
-                        entry: entry,
-                        image: entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) },
-                        index: index
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private var weekDays: [WidgetWeekDayModel] {
-        WidgetCalendarDateRules.week(
-            containing: Date(),
-            registeredEntryIDs: snapshot.entryIDs,
-            language: snapshot.displayLanguage
-        )
-    }
-}
-
-private struct WidgetWeekDayCard: View {
-    let day: WidgetWeekDayModel
-    let entry: WidgetPetCalendarEntry?
-    let image: UIImage?
-    let index: Int
-
-    var body: some View {
-        let hasPhoto = image != nil
-        let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
-
-        VStack(spacing: 3) {
-            Text(day.weekdaySymbol)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(WidgetCalendarColors.mutedText)
-                .frame(height: 10)
-
-            ZStack(alignment: .topLeading) {
-                WidgetAquaSurface(cornerRadius: 6, isDimmed: day.isFuture)
-                    .overlay {
-                        if let image {
-                            WidgetPlacedImage(image: image, placement: entry?.photoPlacement ?? .default)
-                        } else if !hasWeatherIcon {
-                            WidgetPawShape()
-                                .fill(WidgetCalendarColors.paw.opacity(day.isFuture ? 0.12 : 0.24))
-                                .padding(8)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(entry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.4)
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .stroke(day.isToday ? Color.accentColor : Color.clear, lineWidth: 1.6)
-                    }
-
-                if let entry {
-                    WidgetWeatherIconLayer(style: entry.overlayStyle, usesPhotoBackground: hasPhoto)
-                }
-
-                Text("\(day.day)")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(hasPhoto ? Color.white : WidgetCalendarColors.text)
-                    .shadow(color: hasPhoto ? Color.black.opacity(0.35) : .clear, radius: 1, y: 1)
-                    .padding(3)
-            }
-            .aspectRatio(0.78, contentMode: .fit)
-            .opacity(day.isFuture ? 0.48 : 1)
-        }
-    }
-}
-
-private struct WidgetMonthCell: View {
-    let cell: WidgetMonthCellModel
-    let entry: WidgetPetCalendarEntry?
-    let image: UIImage?
-    let isLarge: Bool
-    let rowCount: Int
-
-    var body: some View {
-        let hasPhoto = image != nil
-        let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
-
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Color.clear)
-                .background {
-                    if cell.isInDisplayedMonth {
-                        WidgetAquaSurface(cornerRadius: 5, isDimmed: cell.isFuture)
-                    }
-                }
-                .overlay {
-                    if let image {
-                        WidgetPlacedImage(image: image, placement: entry?.photoPlacement ?? .default)
-                    } else if cell.isInDisplayedMonth, !hasWeatherIcon {
-                        WidgetPawShape()
-                            .fill(WidgetCalendarColors.paw.opacity(0.23))
-                            .padding(isLarge ? 7 : 4)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(entry == nil ? Color.clear : WidgetCalendarColors.registeredFrame, lineWidth: 1.2)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .stroke(cell.isToday ? Color.accentColor : Color.clear, lineWidth: 1.5)
-                }
-
-            if let entry {
-                WidgetWeatherIconLayer(style: entry.overlayStyle, usesPhotoBackground: hasPhoto)
-            }
-
-            if cell.isInDisplayedMonth {
-                Text("\(cell.day)")
-                    .font(.system(size: isLarge ? 11 : 8, weight: .bold))
-                    .foregroundStyle(hasPhoto ? Color.white : WidgetCalendarColors.text)
-                    .shadow(color: hasPhoto ? Color.black.opacity(0.32) : .clear, radius: 1, y: 1)
-                    .padding(2)
-            }
-        }
-        .aspectRatio(aspectRatio, contentMode: .fit)
-        .opacity(cell.isFuture ? 0.42 : 1)
-    }
-
-    private var aspectRatio: CGFloat {
-        if !isLarge {
-            return rowCount <= 5 ? 0.86 : 1.0
-        }
-        return rowCount <= 4 ? 0.68 : (rowCount == 5 ? 0.78 : 1.0)
-    }
-}
-
-private struct WidgetWeatherIconLayer: View {
-    let style: WidgetPetCalendarOverlayStyle
-    let usesPhotoBackground: Bool
-
-    var body: some View {
-        GeometryReader { proxy in
-            if let icon = style.effectiveWeatherIcon {
-                let minSide = min(proxy.size.width, proxy.size.height)
-                let iconSide = max(minSide * 0.32, 12)
-                let inset = max(minSide * 0.10, 3)
-                let center = centerPoint(
-                    for: style.weatherIconCorner,
-                    size: proxy.size,
-                    iconSide: iconSide,
-                    inset: inset
-                )
-
-                Image(systemName: icon.symbolName)
-                    .font(.system(size: iconSide * 0.74, weight: .bold, design: .rounded))
-                    .symbolRenderingMode(.monochrome)
-                    .foregroundStyle(style.accentColor.color)
-                    .shadow(color: usesPhotoBackground ? Color.black.opacity(0.34) : Color.white.opacity(0.78), radius: 1.6, y: 0.8)
-                    .frame(width: iconSide, height: iconSide)
-                    .position(center)
-            }
-        }
-        .allowsHitTesting(false)
-        .widgetAccentable(false)
-    }
-
-    private func centerPoint(for corner: WidgetPetCalendarOverlayCorner, size: CGSize, iconSide: CGFloat, inset: CGFloat) -> CGPoint {
-        let x: CGFloat
-        let y: CGFloat
-
-        switch corner {
-        case .topLeft, .bottomLeft:
-            x = inset + iconSide / 2
-        case .topRight, .bottomRight:
-            x = size.width - inset - iconSide / 2
-        }
-
-        switch corner {
-        case .topLeft, .topRight:
-            y = inset + iconSide / 2
-        case .bottomLeft, .bottomRight:
-            y = size.height - inset - iconSide / 2
-        }
-
-        return CGPoint(x: x, y: y)
-    }
-}
-
-private struct AccessoryInlineWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-
-    var body: some View {
-        Text(accessoryText)
-    }
-
-    private var accessoryText: String {
-        if snapshot.displayLanguage == .japanese {
-            return "\(WidgetCalendarDateRules.compactDateTitle(for: Date(), language: snapshot.displayLanguage)) 今日"
-        }
-        return "\(WidgetCalendarDateRules.compactDateTitle(for: Date(), language: snapshot.displayLanguage)) Today"
-    }
-}
-
-private struct AccessoryCircularWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-
-    var body: some View {
-        ZStack {
-            if let featuredEntry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: featuredEntry) {
-                WidgetPlacedImage(image: image, placement: featuredEntry.photoPlacement)
-                    .clipShape(Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(WidgetCalendarColors.registeredFrame.opacity(0.92), lineWidth: 1.3)
-                    }
-            } else {
-                AccessoryWidgetBackground()
-                WidgetPawShape()
-                    .fill(WidgetCalendarColors.paw.opacity(0.48))
-                    .padding(12)
-            }
-
-            VStack(spacing: 0) {
-                Text(WidgetCalendarDateRules.shortMonthTitle(for: Date(), language: snapshot.displayLanguage))
-                    .font(.system(size: 8, weight: .semibold))
-                    .lineLimit(1)
-                Text("\(WidgetCalendarDateRules.calendar.component(.day, from: Date()))")
-                    .font(.headline.weight(.bold))
-                Text(WidgetCalendarDateRules.weekdayTitle(for: Date(), language: snapshot.displayLanguage))
-                    .font(.system(size: 7, weight: .semibold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(featuredEntry == nil ? WidgetCalendarColors.text : Color.white)
-            .shadow(color: featuredEntry == nil ? .clear : Color.black.opacity(0.34), radius: 1, y: 1)
-        }
-    }
-
-    private var featuredEntry: WidgetPetCalendarEntry? {
-        snapshot.featuredEntry
-    }
-}
-
-private struct AccessoryRectangularWidgetView: View {
-    let snapshot: WidgetPetCalendarSnapshot
-
-    var body: some View {
-        HStack(spacing: 5) {
-            featuredPhoto
-                .frame(width: 38)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(WidgetCalendarDateRules.compactWeekTitle(for: Date(), language: snapshot.displayLanguage))
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(WidgetCalendarColors.text)
-                        .lineLimit(1)
-                    Spacer(minLength: 2)
-                    if snapshot.showsBranding {
-                        WidgetWatermark(compact: true)
-                    }
-                }
-
-                weekRow { day in
-                    Text(day.weekdaySymbol)
-                        .font(.system(size: 7, weight: .semibold))
-                        .foregroundStyle(WidgetCalendarColors.mutedText)
-                }
-                weekRow { day in
-                    Text("\(day.day)")
-                        .font(.system(size: 9, weight: day.isToday ? .bold : .semibold))
-                        .foregroundStyle(day.isFuture ? WidgetCalendarColors.mutedText.opacity(0.55) : WidgetCalendarColors.text)
-                }
-                weekRow { day in
-                    statusMark(day)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var featuredPhoto: some View {
-        if let featuredEntry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: featuredEntry) {
-            WidgetPlacedImage(image: image, placement: featuredEntry.photoPlacement)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(WidgetCalendarColors.registeredFrame.opacity(0.92), lineWidth: 1.2)
-                }
-        } else {
-            ZStack {
-                WidgetAquaSurface(cornerRadius: 6)
-                WidgetPawShape()
-                    .fill(WidgetCalendarColors.paw.opacity(0.36))
-                    .padding(9)
-            }
-        }
-    }
-
-    private func weekRow<Content: View>(@ViewBuilder content: @escaping (WidgetWeekDayModel) -> Content) -> some View {
-        HStack(spacing: 2) {
-            ForEach(Array(weekDays.enumerated()), id: \.offset) { _, day in
-                content(day)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 9)
-                    .opacity(day.isFuture ? 0.48 : 1)
-            }
-        }
-    }
-
-    private var weekDays: [WidgetWeekDayModel] {
-        WidgetCalendarDateRules.week(
-            containing: Date(),
-            registeredEntryIDs: snapshot.entryIDs,
-            language: snapshot.displayLanguage
-        )
-    }
-
-    private var featuredEntry: WidgetPetCalendarEntry? {
-        snapshot.featuredEntry
-    }
-
-    @ViewBuilder
-    private func statusMark(_ day: WidgetWeekDayModel) -> some View {
-        if day.isFuture {
-            Text("-")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(WidgetCalendarColors.mutedText.opacity(0.55))
-        } else if day.isRegistered {
-            Image(systemName: day.isToday ? "checkmark.circle.fill" : "checkmark")
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color.accentColor)
-        } else if day.isToday {
-            Circle()
-                .stroke(Color.accentColor, lineWidth: 1.2)
-                .frame(width: 7, height: 7)
-        } else {
-            Circle()
-                .fill(WidgetCalendarColors.mutedText.opacity(0.38))
-                .frame(width: 5, height: 5)
-        }
-    }
-}
-
 private enum WidgetCalendarColors {
     static let text = Color(red: 0.10, green: 0.17, blue: 0.24)
     static let mutedText = Color(red: 0.34, green: 0.45, blue: 0.54)
-    static let paw = Color(red: 0.58, green: 0.68, blue: 0.76)
-    static let registeredFrame = Color(red: 0.56, green: 0.78, blue: 0.93)
 }
 
 private struct WidgetAquaBackground: View {
@@ -724,80 +183,6 @@ private struct WidgetAquaSurface: View {
     }
 }
 
-private struct WidgetPawShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let side = min(rect.width, rect.height)
-        let origin = CGPoint(x: rect.midX - side / 2, y: rect.midY - side / 2)
-        let toe = side * 0.18
-        let toeCenters = [
-            CGPoint(x: origin.x + side * 0.24, y: origin.y + side * 0.28),
-            CGPoint(x: origin.x + side * 0.42, y: origin.y + side * 0.20),
-            CGPoint(x: origin.x + side * 0.58, y: origin.y + side * 0.20),
-            CGPoint(x: origin.x + side * 0.76, y: origin.y + side * 0.28)
-        ]
-        for point in toeCenters {
-            path.addEllipse(in: CGRect(x: point.x - toe / 2, y: point.y - toe / 2, width: toe, height: toe * 1.12))
-        }
-        path.addRoundedRect(in: CGRect(
-            x: origin.x + side * 0.30,
-            y: origin.y + side * 0.46,
-            width: side * 0.40,
-            height: side * 0.36
-        ), cornerSize: CGSize(
-            width: side * 0.18,
-            height: side * 0.18
-        ))
-        return path
-    }
-}
-
-private struct WidgetPlacedImage: View {
-    @Environment(\.widgetRenderingMode) private var widgetRenderingMode
-
-    let image: UIImage
-    let placement: WidgetPhotoPlacement
-
-    var body: some View {
-        GeometryReader { proxy in
-            let frameRect = CGRect(origin: .zero, size: proxy.size)
-            let drawRect = WidgetPhotoPlacementLayout.drawRect(
-                imageSize: image.size,
-                frameRect: frameRect,
-                placement: placement
-            )
-            fullColorImage(drawRect: drawRect)
-        }
-        .clipped()
-        .widgetAccentable(false)
-    }
-
-    @ViewBuilder
-    private func fullColorImage(drawRect: CGRect) -> some View {
-        if widgetRenderingMode == .vibrant {
-            Image(uiImage: image)
-                .resizable()
-                .frame(width: drawRect.width, height: drawRect.height)
-                .position(x: drawRect.midX, y: drawRect.midY)
-                .brightness(-0.32)
-                .contrast(2.10)
-                .saturation(1.25)
-                .drawingGroup(opaque: false, colorMode: .linear)
-        } else if #available(iOS 18.0, *) {
-            Image(uiImage: image)
-                .resizable()
-                .widgetAccentedRenderingMode(.fullColor)
-                .frame(width: drawRect.width, height: drawRect.height)
-                .position(x: drawRect.midX, y: drawRect.midY)
-        } else {
-            Image(uiImage: image)
-                .resizable()
-                .frame(width: drawRect.width, height: drawRect.height)
-                .position(x: drawRect.midX, y: drawRect.midY)
-        }
-    }
-}
-
 struct WidgetPetCalendarSnapshot: Codable, Hashable {
     var updatedAt: Date
     var selectedMonth: Date
@@ -806,6 +191,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
     var smallImageFileName: String?
     var mediumImageFileName: String?
     var largeImageFileName: String?
+    var renderedImageSets: [WidgetPetCalendarRenderedImageSet]
     var entries: [WidgetPetCalendarEntry]
 
     static let placeholder = WidgetPetCalendarSnapshot(
@@ -816,6 +202,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         smallImageFileName: nil,
         mediumImageFileName: nil,
         largeImageFileName: nil,
+        renderedImageSets: [],
         entries: []
     )
 
@@ -827,6 +214,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         case smallImageFileName
         case mediumImageFileName
         case largeImageFileName
+        case renderedImageSets
         case entries
     }
 
@@ -838,6 +226,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         smallImageFileName: String? = nil,
         mediumImageFileName: String? = nil,
         largeImageFileName: String? = nil,
+        renderedImageSets: [WidgetPetCalendarRenderedImageSet] = [],
         entries: [WidgetPetCalendarEntry]
     ) {
         self.updatedAt = updatedAt
@@ -847,6 +236,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         self.smallImageFileName = smallImageFileName
         self.mediumImageFileName = mediumImageFileName
         self.largeImageFileName = largeImageFileName
+        self.renderedImageSets = renderedImageSets
         self.entries = entries
     }
 
@@ -859,28 +249,33 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         smallImageFileName = try container.decodeIfPresent(String.self, forKey: .smallImageFileName)
         mediumImageFileName = try container.decodeIfPresent(String.self, forKey: .mediumImageFileName)
         largeImageFileName = try container.decodeIfPresent(String.self, forKey: .largeImageFileName)
+        renderedImageSets = try container.decodeIfPresent([WidgetPetCalendarRenderedImageSet].self, forKey: .renderedImageSets) ?? []
         entries = container.decodeLossyArray(WidgetPetCalendarEntry.self, forKey: .entries)
     }
 
-    var todayEntry: WidgetPetCalendarEntry? {
-        entryByID[WidgetCalendarDateRules.id(for: Date())]
-    }
+}
 
-    var featuredEntry: WidgetPetCalendarEntry? {
-        let today = WidgetCalendarDateRules.calendar.startOfDay(for: Date())
-        return entries
-            .filter { WidgetCalendarDateRules.calendar.startOfDay(for: $0.date) <= today }
-            .max { $0.date < $1.date }
-    }
+struct WidgetPetCalendarRenderedImageNames: Codable, Hashable {
+    var small: String
+    var medium: String
+    var large: String
+}
 
-    var entryByID: [String: WidgetPetCalendarEntry] {
-        entries.reduce(into: [:]) { result, entry in
-            result[entry.id] = entry
+struct WidgetPetCalendarRenderedImageSet: Codable, Hashable {
+    var dayID: String
+    var imageNames: WidgetPetCalendarRenderedImageNames
+
+    func fileName(for family: WidgetFamily) -> String {
+        switch family {
+        case .systemSmall:
+            return imageNames.small
+        case .systemMedium:
+            return imageNames.medium
+        case .systemLarge:
+            return imageNames.large
+        default:
+            return imageNames.small
         }
-    }
-
-    var entryIDs: Set<String> {
-        Set(entries.map(\.id))
     }
 }
 
@@ -1118,30 +513,6 @@ struct WidgetPhotoPlacement: Codable, Hashable {
     }
 }
 
-private enum WidgetPhotoPlacementLayout {
-    static func drawRect(imageSize: CGSize, frameRect: CGRect, placement: WidgetPhotoPlacement) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0, frameRect.width > 0, frameRect.height > 0 else {
-            return frameRect
-        }
-        let clamped = placement.clamped
-        let baseScale = max(frameRect.width / imageSize.width, frameRect.height / imageSize.height)
-        let drawScale = baseScale * CGFloat(clamped.scale)
-        let drawSize = CGSize(width: imageSize.width * drawScale, height: imageSize.height * drawScale)
-        let overflowX = max(0, (drawSize.width - frameRect.width) / 2)
-        let overflowY = max(0, (drawSize.height - frameRect.height) / 2)
-        let center = CGPoint(
-            x: frameRect.midX + CGFloat(clamped.offsetX) * overflowX,
-            y: frameRect.midY + CGFloat(clamped.offsetY) * overflowY
-        )
-        return CGRect(
-            x: center.x - drawSize.width / 2,
-            y: center.y - drawSize.height / 2,
-            width: drawSize.width,
-            height: drawSize.height
-        )
-    }
-}
-
 private enum WidgetPetCalendarSnapshotStore {
     static func load() -> WidgetPetCalendarSnapshot {
         loadSnapshot()
@@ -1160,62 +531,16 @@ private enum WidgetPetCalendarSnapshotStore {
         return (try? decoder.decode(WidgetPetCalendarSnapshot.self, from: data)) ?? .placeholder
     }
 
-    private static func loadIndexEntries() -> [WidgetPetCalendarEntry]? {
-        guard
-            let directory = calendarDirectory,
-            let data = try? Data(contentsOf: directory.appendingPathComponent("index.json"))
-        else {
-            return nil
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(WidgetPetCalendarEntryList.self, from: data).entries)?
-            .sorted { $0.date < $1.date }
-    }
-
-    static func thumbnail(for entry: WidgetPetCalendarEntry) -> UIImage? {
-        guard
-            let directory = calendarDirectory
-        else {
-            return nil
-        }
-
-        let thumbnailURL = entry.thumbnailFileName.map {
-            directory
-                .appendingPathComponent("Thumbnails", isDirectory: true)
-                .appendingPathComponent($0)
-        }
-        let imageURL = entry.imageFileName.map {
-            directory
-                .appendingPathComponent("Images", isDirectory: true)
-                .appendingPathComponent($0)
-        }
-
-        for url in [thumbnailURL, imageURL].compactMap({ $0 }) {
-            if let image = UIImage(contentsOfFile: url.path) {
-                return image
-            }
-        }
-        return nil
-    }
-
     static func renderedImage(for family: WidgetFamily, snapshot: WidgetPetCalendarSnapshot) -> UIImage? {
         guard let directory = sharedDirectory else {
             return nil
         }
 
-        let fileName: String?
-        switch family {
-        case .systemSmall:
-            fileName = snapshot.smallImageFileName
-        case .systemMedium:
-            fileName = snapshot.mediumImageFileName
-        case .systemLarge:
-            fileName = snapshot.largeImageFileName
-        default:
-            fileName = snapshot.smallImageFileName
-        }
+        let todayID = WidgetCalendarDateRules.id(for: Date())
+        let fileName = snapshot.renderedImageSets
+            .first(where: { $0.dayID == todayID })?
+            .fileName(for: family)
+            ?? legacyFileName(for: family, snapshot: snapshot)
 
         guard let fileName else {
             return nil
@@ -1223,35 +548,23 @@ private enum WidgetPetCalendarSnapshotStore {
         return UIImage(contentsOfFile: directory.appendingPathComponent(fileName).path)
     }
 
+    private static func legacyFileName(for family: WidgetFamily, snapshot: WidgetPetCalendarSnapshot) -> String? {
+        switch family {
+        case .systemSmall:
+            return snapshot.smallImageFileName
+        case .systemMedium:
+            return snapshot.mediumImageFileName
+        case .systemLarge:
+            return snapshot.largeImageFileName
+        default:
+            return snapshot.smallImageFileName
+        }
+    }
+
     private static var sharedDirectory: URL? {
         FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)?
             .appendingPathComponent("PetCalendar/Widget", isDirectory: true)
-    }
-
-    private static var calendarDirectory: URL? {
-        sharedDirectory?.deletingLastPathComponent()
-    }
-}
-
-private struct WidgetPetCalendarEntryList: Decodable {
-    var entries: [WidgetPetCalendarEntry]
-
-    init(from decoder: Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        var entries: [WidgetPetCalendarEntry] = []
-        while !container.isAtEnd {
-            if let entry = try? container.decode(WidgetPetCalendarEntry.self) {
-                entries.append(entry)
-            } else {
-                let previousIndex = container.currentIndex
-                _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
-                if container.currentIndex == previousIndex {
-                    break
-                }
-            }
-        }
-        self.entries = entries
     }
 }
 
@@ -1320,92 +633,11 @@ private struct WidgetPetCalendarLossyArray<Element: Decodable>: Decodable {
     }
 }
 
-private struct WidgetMonthCellModel: Hashable {
-    var id: String
-    var date: Date
-    var day: Int
-    var isInDisplayedMonth: Bool
-    var isToday: Bool
-    var isFuture: Bool
-}
-
-private struct WidgetWeekDayModel: Identifiable, Hashable {
-    var id: String
-    var date: Date
-    var day: Int
-    var weekdaySymbol: String
-    var isToday: Bool
-    var isFuture: Bool
-    var isRegistered: Bool
-}
-
 private enum WidgetCalendarDateRules {
     static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.firstWeekday = 1
         return calendar
-    }
-
-    static func weekdays(language: WidgetPetCalendarDisplayLanguage) -> [String] {
-        switch language {
-        case .japanese:
-            return ["日", "月", "火", "水", "木", "金", "土"]
-        case .english:
-            return ["S", "M", "T", "W", "T", "F", "S"]
-        }
-    }
-
-    static func dateTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        let components = calendar.dateComponents([.month, .day], from: date)
-        let month = components.month ?? 0
-        let day = components.day ?? 0
-        switch language {
-        case .japanese:
-            return "\(month)月\(day)日"
-        case .english:
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US")
-            formatter.dateFormat = "MMM d"
-            return formatter.string(from: date)
-        }
-    }
-
-    static func compactDateTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        let components = calendar.dateComponents([.month, .day], from: date)
-        let month = components.month ?? 0
-        let day = components.day ?? 0
-        switch language {
-        case .japanese:
-            return "\(month)/\(day)"
-        case .english:
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US")
-            formatter.dateFormat = "M/d"
-            return formatter.string(from: date)
-        }
-    }
-
-    static func weekdayTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        let weekday = max(1, min(7, calendar.component(.weekday, from: date)))
-        switch language {
-        case .japanese:
-            return ["日", "月", "火", "水", "木", "金", "土"][weekday - 1]
-        case .english:
-            return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday - 1]
-        }
-    }
-
-    static func shortMonthTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        let month = calendar.component(.month, from: date)
-        switch language {
-        case .japanese:
-            return "\(month)月"
-        case .english:
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US")
-            formatter.dateFormat = "MMM"
-            return formatter.string(from: date)
-        }
     }
 
     static func monthTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
@@ -1423,93 +655,13 @@ private enum WidgetCalendarDateRules {
         }
     }
 
-    static func weekTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        switch language {
-        case .japanese:
-            return "\(monthTitle(for: date, language: language)) 今週"
-        case .english:
-            return "\(monthTitle(for: date, language: language)) Week"
-        }
-    }
-
-    static func compactWeekTitle(for date: Date, language: WidgetPetCalendarDisplayLanguage) -> String {
-        switch language {
-        case .japanese:
-            return "\(shortMonthTitle(for: date, language: language)) 今週"
-        case .english:
-            return "\(shortMonthTitle(for: date, language: language)) Week"
-        }
-    }
-
     static func id(for date: Date) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
-    }
-
-    static func monthStart(for date: Date) -> Date {
-        calendar.date(from: calendar.dateComponents([.year, .month], from: date)) ?? calendar.startOfDay(for: date)
-    }
-
-    static func startOfWeek(containing date: Date) -> Date {
-        let start = calendar.startOfDay(for: date)
-        let leadingDays = (calendar.component(.weekday, from: start) - calendar.firstWeekday + 7) % 7
-        return calendar.date(byAdding: .day, value: -leadingDays, to: start) ?? start
-    }
-
-    static func week(
-        containing date: Date,
-        now: Date = Date(),
-        registeredEntryIDs: Set<String>,
-        language: WidgetPetCalendarDisplayLanguage
-    ) -> [WidgetWeekDayModel] {
-        let start = startOfWeek(containing: date)
-        let todayID = id(for: now)
-        let weekdaySymbols = weekdays(language: language)
-        return (0..<7).compactMap { offset in
-            guard let day = calendar.date(byAdding: .day, value: offset, to: start) else {
-                return nil
-            }
-            let dayID = id(for: day)
-            return WidgetWeekDayModel(
-                id: dayID,
-                date: day,
-                day: calendar.component(.day, from: day),
-                weekdaySymbol: weekdaySymbols[offset],
-                isToday: dayID == todayID,
-                isFuture: calendar.startOfDay(for: day) > calendar.startOfDay(for: now),
-                isRegistered: registeredEntryIDs.contains(dayID)
-            )
-        }
-    }
-
-    static func monthGrid(for month: Date) -> [WidgetMonthCellModel] {
-        let monthStart = monthStart(for: month)
-        let leadingDays = (calendar.component(.weekday, from: monthStart) - calendar.firstWeekday + 7) % 7
-        let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart) ?? monthStart
-        let monthInterval = calendar.dateInterval(of: .month, for: monthStart)
-        let lastMonthDate = monthInterval
-            .flatMap { calendar.date(byAdding: .day, value: -1, to: $0.end) }
-            ?? monthStart
-        let trailingDays = (calendar.firstWeekday + 6 - calendar.component(.weekday, from: lastMonthDate) + 7) % 7
-        let gridEnd = calendar.date(byAdding: .day, value: trailingDays + 1, to: lastMonthDate) ?? lastMonthDate
-        let dayCount = max(28, calendar.dateComponents([.day], from: gridStart, to: gridEnd).day ?? 42)
-        let displayedMonth = calendar.component(.month, from: monthStart)
-        let displayedYear = calendar.component(.year, from: monthStart)
-        let todayID = id(for: Date())
-
-        return (0..<dayCount).compactMap { offset in
-            guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else {
-                return nil
-            }
-            let components = calendar.dateComponents([.year, .month, .day], from: date)
-            return WidgetMonthCellModel(
-                id: id(for: date),
-                date: date,
-                day: components.day ?? 0,
-                isInDisplayedMonth: components.year == displayedYear && components.month == displayedMonth,
-                isToday: id(for: date) == todayID,
-                isFuture: calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
-            )
-        }
+        return String(
+            format: "%04d-%02d-%02d",
+            components.year ?? 0,
+            components.month ?? 0,
+            components.day ?? 0
+        )
     }
 }

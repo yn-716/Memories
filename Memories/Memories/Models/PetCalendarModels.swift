@@ -9,6 +9,20 @@ enum PetCalendarConstants {
     static let thumbnailJPEGQuality: CGFloat = 0.76
 }
 
+enum PetCalendarGridMetrics {
+    static let defaultCellAspectRatio: CGFloat = 0.78
+
+    static func cellAspectRatio(forRowCount rowCount: Int) -> CGFloat {
+        if rowCount <= 4 {
+            return 0.60
+        }
+        if rowCount == 5 {
+            return 0.68
+        }
+        return defaultCellAspectRatio
+    }
+}
+
 enum PetCalendarDisplayLanguage: String, Codable, CaseIterable, Identifiable, Hashable {
     case japanese
     case english
@@ -453,11 +467,6 @@ struct PetCalendarMonthCell: Identifiable, Hashable {
     var isFuture: Bool
 }
 
-struct PetCalendarMonthSummary: Hashable {
-    var registeredCount: Int
-    var currentStreak: Int
-}
-
 enum PetCalendarDateRules {
     static func gregorianCalendar(timeZone: TimeZone = .current) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -562,29 +571,6 @@ enum PetCalendarDateRules {
         case .english:
             return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
         }
-    }
-
-    static func summary(entries: [PetCalendarDayEntry], month: Date, now: Date = Date(), calendar: Calendar = gregorianCalendar()) -> PetCalendarMonthSummary {
-        let monthStart = monthStart(for: month, calendar: calendar)
-        let monthInterval = calendar.dateInterval(of: .month, for: monthStart)
-        let registeredCount = entries.filter { entry in
-            guard let monthInterval else {
-                return false
-            }
-            return monthInterval.contains(entry.date)
-        }.count
-        let entryIDs = Set(entries.map { id(for: $0.date, calendar: calendar) })
-        var streak = 0
-        var cursor = startOfDay(for: now, calendar: calendar)
-        while entryIDs.contains(id(for: cursor, calendar: calendar)) {
-            streak += 1
-            guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else {
-                break
-            }
-            cursor = previous
-        }
-
-        return PetCalendarMonthSummary(registeredCount: registeredCount, currentStreak: streak)
     }
 
     static func week(

@@ -1,20 +1,28 @@
 import Foundation
 import UIKit
 
-enum PetCalendarWidgetRenderedImageFamily: CaseIterable {
+enum PetCalendarWidgetRenderedImageFamily: CaseIterable, Hashable {
     case small
     case medium
     case large
 
-    var fileName: String {
+    var fileStem: String {
         switch self {
         case .small:
-            return "pet-calendar-widget-small.jpg"
+            return "pet-calendar-widget-small"
         case .medium:
-            return "pet-calendar-widget-medium.jpg"
+            return "pet-calendar-widget-medium"
         case .large:
-            return "pet-calendar-widget-large.jpg"
+            return "pet-calendar-widget-large"
         }
+    }
+
+    var fileName: String {
+        "\(fileStem).jpg"
+    }
+
+    func fileName(versionID: String) -> String {
+        "\(fileStem)-\(versionID).jpg"
     }
 
     var size: CGSize {
@@ -33,6 +41,11 @@ struct PetCalendarWidgetRenderedImage {
     var family: PetCalendarWidgetRenderedImageFamily
     var fileName: String
     var image: UIImage
+}
+
+private enum PetCalendarWidgetWatermarkAlignment {
+    case leading
+    case trailing
 }
 
 struct PetCalendarWidgetRenderer {
@@ -80,7 +93,7 @@ struct PetCalendarWidgetRenderer {
             case .small:
                 drawSmallWidget(snapshot: snapshot, entries: entries, thumbnailsByID: thumbnailsByID, now: now, in: context, bounds: bounds)
             case .medium:
-                drawMonthWidget(snapshot: snapshot, entries: entries, thumbnailsByID: thumbnailsByID, now: now, in: context, bounds: bounds, isLarge: false)
+                drawWeekWidget(snapshot: snapshot, entries: entries, thumbnailsByID: thumbnailsByID, now: now, in: context, bounds: bounds)
             case .large:
                 drawMonthWidget(snapshot: snapshot, entries: entries, thumbnailsByID: thumbnailsByID, now: now, in: context, bounds: bounds, isLarge: true)
             }
@@ -154,7 +167,96 @@ struct PetCalendarWidgetRenderer {
             drawWatermark(
                 in: CGRect(x: card.minX + 28, y: card.maxY - 76, width: min(card.width - 56, 265), height: 44),
                 context: context,
-                compact: true
+                compact: true,
+                alignment: .leading
+            )
+        }
+    }
+
+    private func drawWeekWidget(
+        snapshot: PetCalendarWidgetSnapshot,
+        entries: [PetCalendarDayEntry],
+        thumbnailsByID: [String: UIImage],
+        now: Date,
+        in context: CGContext,
+        bounds: CGRect
+    ) {
+        let card = bounds.insetBy(dx: 30, dy: 28)
+        drawGlassSurface(in: card, cornerRadius: 42, context: context)
+
+        let entriesByID = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        let registeredIDs = Set(entries.map(\.id))
+        let week = PetCalendarDateRules.week(
+            containing: now,
+            now: now,
+            registeredEntryIDs: registeredIDs,
+            calendar: calendar
+        )
+        let content = card.insetBy(dx: 42, dy: 30)
+        let titleHeight: CGFloat = 44
+        drawText(
+            weekTitle(for: week, language: snapshot.displayLanguage),
+            in: CGRect(x: content.minX, y: content.minY, width: content.width * 0.66, height: titleHeight),
+            font: .systemFont(ofSize: 31, weight: .bold),
+            color: UIColor(hex: "#1F3447"),
+            alignment: .left
+        )
+
+        if snapshot.showsBranding {
+            drawWatermark(
+                in: CGRect(x: content.minX, y: content.minY + 5, width: content.width, height: 34),
+                context: context,
+                compact: true,
+                alignment: .trailing
+            )
+        }
+
+        let weekdayTop = content.minY + titleHeight + 12
+        let weekdayHeight: CGFloat = 24
+        let gridTop = weekdayTop + weekdayHeight + 10
+        let columnSpacing: CGFloat = 8
+        let cellWidth = (content.width - columnSpacing * 6) / 7
+        let cellHeight = min(content.maxY - gridTop, cellWidth / PetCalendarGridMetrics.defaultCellAspectRatio)
+        let weekdaySymbols = PetCalendarDateRules.weekdaySymbols(language: snapshot.displayLanguage)
+
+        for index in 0..<7 {
+            drawText(
+                weekdaySymbols[index],
+                in: CGRect(
+                    x: content.minX + CGFloat(index) * (cellWidth + columnSpacing),
+                    y: weekdayTop,
+                    width: cellWidth,
+                    height: weekdayHeight
+                ),
+                font: .systemFont(ofSize: 18, weight: .semibold),
+                color: UIColor(hex: "#4F7FA3").withAlphaComponent(0.78),
+                alignment: .center
+            )
+        }
+
+        for (index, day) in week.enumerated() {
+            let rect = CGRect(
+                x: content.minX + CGFloat(index) * (cellWidth + columnSpacing),
+                y: gridTop,
+                width: cellWidth,
+                height: cellHeight
+            )
+            let cell = PetCalendarMonthCell(
+                id: day.id,
+                date: day.date,
+                dayNumber: day.dayNumber,
+                isInDisplayedMonth: true,
+                isToday: day.isToday,
+                isFuture: day.isFuture
+            )
+            let entry = entriesByID[day.id]
+            drawCell(
+                cell,
+                entry: entry,
+                thumbnail: entry.flatMap { thumbnailsByID[$0.id] },
+                in: rect,
+                context: context,
+                isLarge: true
             )
         }
     }
@@ -184,11 +286,11 @@ struct PetCalendarWidgetRenderer {
         )
 
         if snapshot.showsBranding {
-            let watermarkWidth: CGFloat = isLarge ? 250 : 210
             drawWatermark(
-                in: CGRect(x: content.maxX - watermarkWidth, y: content.minY + 4, width: watermarkWidth, height: isLarge ? 42 : 34),
+                in: CGRect(x: content.minX, y: content.minY + 4, width: content.width, height: isLarge ? 42 : 34),
                 context: context,
-                compact: !isLarge
+                compact: !isLarge,
+                alignment: .trailing
             )
         }
 
@@ -412,7 +514,33 @@ struct PetCalendarWidgetRenderer {
         context.restoreGState()
     }
 
-    private func drawWatermark(in rect: CGRect, context: CGContext, compact: Bool) {
+    private func drawWatermark(
+        in maxRect: CGRect,
+        context: CGContext,
+        compact: Bool,
+        alignment: PetCalendarWidgetWatermarkAlignment
+    ) {
+        let brandName = WatermarkRenderer.brandName
+        let height = maxRect.height
+        let padding = height * 0.24
+        let iconSide = height * 0.58
+        let font = UIFont.systemFont(ofSize: compact ? height * 0.34 : height * 0.36, weight: .semibold)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.white.withAlphaComponent(0.92)
+        ]
+        let textSize = NSString(string: brandName).size(withAttributes: textAttributes)
+        let appIcon = UIImage(named: "watermark_app_icon")
+        let iconWidth = appIcon == nil ? CGFloat.zero : iconSide
+        let spacing = appIcon == nil ? CGFloat.zero : height * 0.14
+        let rawWidth = padding * 2 + iconWidth + spacing + textSize.width
+        let pillWidth = min(maxRect.width, ceil(rawWidth))
+        let rect = CGRect(
+            x: alignment == .leading ? maxRect.minX : maxRect.maxX - pillWidth,
+            y: maxRect.minY,
+            width: pillWidth,
+            height: height
+        )
         let path = UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2)
         context.saveGState()
         context.setShadow(offset: CGSize(width: 0, height: 6), blur: 12, color: UIColor.black.withAlphaComponent(0.18).cgColor)
@@ -424,10 +552,8 @@ struct PetCalendarWidgetRenderer {
         path.lineWidth = 1
         path.stroke()
 
-        let padding = rect.height * 0.22
-        let iconSide = rect.height * 0.58
         var textMinX = rect.minX + padding
-        if let icon = UIImage(named: "watermark_app_icon") {
+        if let icon = appIcon {
             let iconRect = CGRect(x: rect.minX + padding, y: rect.midY - iconSide / 2, width: iconSide, height: iconSide)
             context.saveGState()
             UIBezierPath(roundedRect: iconRect, cornerRadius: iconSide * 0.18).addClip()
@@ -437,12 +563,37 @@ struct PetCalendarWidgetRenderer {
         }
 
         drawText(
-            WatermarkRenderer.brandName,
-            in: CGRect(x: textMinX, y: rect.minY + rect.height * 0.22, width: rect.maxX - textMinX - padding, height: rect.height * 0.58),
-            font: .systemFont(ofSize: compact ? rect.height * 0.34 : rect.height * 0.36, weight: .semibold),
+            brandName,
+            in: CGRect(x: textMinX, y: rect.midY - textSize.height / 2, width: rect.maxX - textMinX - padding, height: textSize.height),
+            font: font,
             color: UIColor.white.withAlphaComponent(0.92),
             alignment: .left
         )
+    }
+
+    private func weekTitle(for week: [PetCalendarWeekDay], language: PetCalendarDisplayLanguage) -> String {
+        guard let first = week.first?.date, let last = week.last?.date else {
+            return PetCalendarDateRules.shortDateTitle(for: Date(), language: language, calendar: calendar)
+        }
+        let firstMonth = calendar.component(.month, from: first)
+        let lastMonth = calendar.component(.month, from: last)
+        let firstDay = calendar.component(.day, from: first)
+        let lastDay = calendar.component(.day, from: last)
+
+        if firstMonth == lastMonth {
+            switch language {
+            case .japanese:
+                return "\(firstMonth)月 \(firstDay)-\(lastDay)日"
+            case .english:
+                let formatter = DateFormatter()
+                formatter.calendar = calendar
+                formatter.locale = Locale(identifier: "en_US")
+                formatter.dateFormat = "MMM"
+                return "\(formatter.string(from: first)) \(firstDay)-\(lastDay)"
+            }
+        }
+
+        return "\(PetCalendarDateRules.shortDateTitle(for: first, language: language, calendar: calendar)) - \(PetCalendarDateRules.shortDateTitle(for: last, language: language, calendar: calendar))"
     }
 
     private func weatherIconCenterX(

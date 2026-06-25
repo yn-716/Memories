@@ -40,7 +40,7 @@ struct PetCalendarHomeView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
 
-                    todayCTA
+                    calendarInstruction
 
                     PetCalendarMonthView(
                         month: selectedMonth,
@@ -120,17 +120,6 @@ struct PetCalendarHomeView: View {
                     .buttonStyle(.plain)
                 }
 
-                HStack(spacing: 10) {
-                    summaryPill(
-                        title: String(format: appState.t("calendar.registeredThisMonth"), summary.registeredCount),
-                        systemImage: "photo.stack"
-                    )
-                    summaryPill(
-                        title: String(format: appState.t("calendar.streak"), summary.currentStreak),
-                        systemImage: "flame"
-                    )
-                }
-
                 Picker(appState.t("calendar.displayLanguage"), selection: $appState.petCalendarDisplayLanguage) {
                     ForEach(PetCalendarDisplayLanguage.allCases) { language in
                         Text(language.displayName(in: appState.resolvedLanguage)).tag(language)
@@ -142,14 +131,17 @@ struct PetCalendarHomeView: View {
         }
     }
 
-    private var todayCTA: some View {
-        let hasToday = entries.contains { $0.id == PetCalendarDateRules.id(for: Date()) }
-        return MemoriesPrimaryButton(
-            hasToday ? appState.t("calendar.editToday") : appState.t("calendar.addToday"),
-            systemImage: hasToday ? "square.and.pencil" : "plus"
-        ) {
-            selectedDay = PetCalendarIdentifiedDate(date: Date())
-        }
+    private var calendarInstruction: some View {
+        Label(appState.t("calendar.tapDateInstruction"), systemImage: "hand.tap")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(MemoriesTheme.textMain)
+            .lineLimit(2)
+            .minimumScaleFactor(0.86)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PetCalendarAquaSurface(cornerRadius: 12))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var actionGrid: some View {
@@ -168,23 +160,6 @@ struct PetCalendarHomeView: View {
             }
             .buttonStyle(.plain)
         }
-    }
-
-    private var summary: PetCalendarMonthSummary {
-        PetCalendarDateRules.summary(entries: entries, month: selectedMonth)
-    }
-
-    private func summaryPill(title: String, systemImage: String) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(MemoriesTheme.textMain)
-            .lineLimit(1)
-            .minimumScaleFactor(0.78)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 10)
-            .background(PetCalendarAquaSurface(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private func moveMonth(by value: Int) {
@@ -361,7 +336,7 @@ private struct PetCalendarDayCell: View {
 }
 
 private enum PetCalendarCellMetrics {
-    static let defaultAspectRatio: CGFloat = 0.78
+    static let defaultAspectRatio = PetCalendarGridMetrics.defaultCellAspectRatio
     static let cornerRadius: CGFloat = 8
     static let dateFontRatio: CGFloat = 0.24
     static let dateMinimumFont: CGFloat = 11
@@ -374,13 +349,7 @@ private enum PetCalendarCellMetrics {
     static let registeredFrame = Color(hex: "#93C8ED")
 
     static func aspectRatio(forRowCount rowCount: Int) -> CGFloat {
-        if rowCount <= 4 {
-            return 0.60
-        }
-        if rowCount == 5 {
-            return 0.68
-        }
-        return defaultAspectRatio
+        PetCalendarGridMetrics.cellAspectRatio(forRowCount: rowCount)
     }
 }
 
@@ -1221,259 +1190,6 @@ struct PetCalendarDayEditorView: View {
         } catch {
             alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: error.localizedDescription)
         }
-    }
-}
-
-struct PetCalendarImportView: View {
-    var onSaved: () -> Void = {}
-
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: MemoriesAppState
-    @State private var selectedItems: [PhotosPickerItem] = []
-    @State private var showPhotoPicker = false
-    @State private var groups: [PetCalendarImportGroup] = []
-    @State private var alert: PetCalendarAlert?
-    @State private var isProcessing = false
-
-    private var repository: PetCalendarRepository? {
-        try? PetCalendarRepository()
-    }
-
-    var body: some View {
-        let batchAddTitle = appState.t("calendar.batchAdd")
-
-        ZStack {
-            PetCalendarAquaBackdrop().ignoresSafeArea()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Button {
-                        showPhotoPicker = true
-                    } label: {
-                        MemoriesPrimaryButtonLabel(title: batchAddTitle, systemImage: "photo.on.rectangle.angled")
-                    }
-                    .buttonStyle(.plain)
-                    .photosPicker(
-                        isPresented: $showPhotoPicker,
-                        selection: $selectedItems,
-                        matching: .images,
-                        photoLibrary: .shared()
-                    )
-
-                    if isProcessing {
-                        ProgressView()
-                            .tint(MemoriesTheme.accentDeep)
-                            .frame(maxWidth: .infinity)
-                    }
-
-                    ForEach($groups) { $group in
-                        PetCalendarImportGroupView(group: $group)
-                    }
-
-                    if !plannedEntries.isEmpty {
-                        MemoriesGlassPanel {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(appState.t("calendar.registrationPlan"))
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(MemoriesTheme.textMain)
-
-                                ForEach(plannedEntries) { plan in
-                                    HStack {
-                                        Text(PetCalendarDateRules.shortDateTitle(for: plan.date, language: appState.petCalendarDisplayLanguage))
-                                            .font(.subheadline.weight(.semibold))
-                                            .foregroundStyle(MemoriesTheme.textMain)
-                                        Spacer()
-                                        Text(plan.replacesExisting ? appState.t("calendar.replace") : appState.t("calendar.saveEntry"))
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(MemoriesTheme.textSub)
-                                    }
-                                }
-                            }
-                            .padding(14)
-                        }
-                    }
-
-                    if !groups.isEmpty {
-                        MemoriesPrimaryButton(appState.t("calendar.saveEntry"), systemImage: "checkmark") {
-                            savePlannedEntries()
-                        }
-                    }
-                }
-                .padding(20)
-                .frame(maxWidth: MemoriesLayoutMetrics.settingsMaxWidth, alignment: .leading)
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .navigationTitle(appState.t("calendar.batchAdd"))
-        .navigationBarTitleDisplayMode(.inline)
-        .task(id: selectedItems) {
-            await loadSelectedItems()
-        }
-        .alert(item: $alert) { alert in
-            Alert(title: Text(alert.title), message: alert.message.map(Text.init), dismissButton: .default(Text(appState.t("common.ok"))))
-        }
-    }
-
-    private var plannedEntries: [PetCalendarImportPlannedEntry] {
-        PetCalendarImportPlanner().plannedEntries(from: groups)
-    }
-
-    @MainActor
-    private func loadSelectedItems() async {
-        guard !selectedItems.isEmpty else {
-            return
-        }
-
-        isProcessing = true
-        defer {
-            isProcessing = false
-            selectedItems = []
-        }
-
-        do {
-            var payloads: [(data: Data, image: UIImage)] = []
-            for item in selectedItems {
-                if let data = try await item.loadTransferable(type: Data.self),
-                   let image = UIImage(data: data) {
-                    payloads.append((data, image))
-                }
-            }
-
-            let planner = PetCalendarImportPlanner()
-            let candidates = await planner.makeCandidates(from: payloads)
-            groups = planner.groups(
-                for: candidates,
-                existingEntries: repository?.loadEntries() ?? []
-            )
-        } catch {
-            alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: error.localizedDescription)
-        }
-    }
-
-    private func savePlannedEntries() {
-        guard let repository else {
-            alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: PetCalendarRepositoryError.appGroupContainerUnavailable.localizedDescription)
-            return
-        }
-
-        let planner = PetCalendarImportPlanner()
-        let plans = planner.plannedEntries(from: groups)
-        guard !plans.isEmpty else {
-            alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: appState.t("calendar.batchEmpty"))
-            return
-        }
-
-        do {
-            for plan in plans {
-                _ = try repository.save(
-                    image: plan.candidate.image,
-                    caption: "",
-                    for: plan.date,
-                    allowReplace: plan.replacesExisting,
-                    updatesWidgetSnapshot: false
-                )
-            }
-            try? repository.writeWidgetSnapshot(
-                entries: repository.loadEntries(),
-                selectedMonth: Date(),
-                displayLanguage: appState.petCalendarDisplayLanguage,
-                showsBranding: !appState.watermarkPolicy().snapshot.hasUnlimitedAccess
-            )
-            reloadWidgetTimelines()
-            onSaved()
-            dismiss()
-        } catch {
-            alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: error.localizedDescription)
-        }
-    }
-}
-
-private struct PetCalendarImportGroupView: View {
-    @Binding var group: PetCalendarImportGroup
-    @EnvironmentObject private var appState: MemoriesAppState
-
-    var body: some View {
-        MemoriesGlassPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(title)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(MemoriesTheme.textMain)
-                    Spacer()
-                    if group.requiresUserDecision {
-                        Text(appState.t("calendar.registrationPlan"))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(MemoriesTheme.textSub)
-                    }
-                }
-
-                if group.date == nil {
-                    DatePicker(
-                        appState.t("calendar.manualDate"),
-                        selection: manualDateBinding,
-                        in: ...Date(),
-                        displayedComponents: .date
-                    )
-                }
-
-                if group.isFutureDate {
-                    Text(appState.t("calendar.batchFuture"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.red)
-                }
-
-                if group.candidates.count > 1 {
-                    Picker(appState.t("calendar.chooseRepresentative"), selection: Binding(
-                        get: { group.selectedCandidateID ?? group.candidates.first?.id },
-                        set: { group.selectedCandidateID = $0 }
-                    )) {
-                        ForEach(group.candidates) { candidate in
-                            Text(candidateTitle(candidate)).tag(Optional(candidate.id))
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-
-                if let existingEntry = group.existingEntry {
-                    Picker(appState.t("calendar.replaceTitle"), selection: $group.action) {
-                        Text(appState.t("calendar.keepExisting")).tag(PetCalendarImportGroupAction.keepExisting)
-                        Text(appState.t("calendar.replace")).tag(PetCalendarImportGroupAction.replaceExisting)
-                    }
-                    .pickerStyle(.segmented)
-
-                    Text(existingEntry.id)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(MemoriesTheme.textSub)
-                }
-            }
-            .padding(14)
-        }
-    }
-
-    private var title: String {
-        guard let date = group.date else {
-            return appState.t("calendar.batchNeedsDate")
-        }
-        return PetCalendarDateRules.shortDateTitle(for: date, language: appState.petCalendarDisplayLanguage)
-    }
-
-    private var manualDateBinding: Binding<Date> {
-        Binding {
-            group.date ?? Date()
-        } set: { newValue in
-            group.date = PetCalendarDateRules.startOfDay(for: newValue)
-            group.isFutureDate = !PetCalendarDateRules.canRegisterPhoto(for: newValue)
-            if var first = group.candidates.first {
-                first.manualDate = newValue
-                group.candidates[0] = first
-            }
-        }
-    }
-
-    private func candidateTitle(_ candidate: PetCalendarImportCandidate) -> String {
-        if let capturedAt = candidate.capturedAt {
-            return PetCalendarDateRules.shortDateTitle(for: capturedAt, language: appState.petCalendarDisplayLanguage)
-        }
-        return appState.t("calendar.manualDate")
     }
 }
 

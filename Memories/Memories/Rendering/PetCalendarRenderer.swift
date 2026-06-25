@@ -140,7 +140,7 @@ struct PetCalendarRenderer {
     func render(configuration: PetCalendarRenderConfiguration) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        format.opaque = false
+        format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: configuration.size, format: format)
 
         return renderer.image { rendererContext in
@@ -167,7 +167,8 @@ struct PetCalendarRenderer {
     }
 
     private func drawBackground(in context: CGContext, bounds: CGRect) {
-        context.clear(bounds)
+        UIColor(hex: "#F8FCFE").setFill()
+        context.fill(bounds)
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let colors = [

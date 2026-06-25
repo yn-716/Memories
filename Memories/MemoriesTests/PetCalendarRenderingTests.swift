@@ -45,6 +45,27 @@ final class PetCalendarRenderingTests: XCTestCase {
         XCTAssertEqual(entry.photoPlacement, placement)
     }
 
+    func testRendererKeepsBackgroundLightAfterJPEGEncoding() throws {
+        let renderer = PetCalendarRenderer(calendar: testCalendar)
+        let image = renderer.render(
+            configuration: PetCalendarRenderConfiguration(
+                month: date(year: 2026, month: 6, day: 1),
+                entries: [],
+                displayLanguage: .english,
+                watermarkMode: .visible,
+                now: date(year: 2026, month: 6, day: 25),
+                size: CGSize(width: 700, height: 900)
+            )
+        )
+
+        let jpegData = try XCTUnwrap(image.jpegData(compressionQuality: 1))
+        let jpegImage = try XCTUnwrap(UIImage(data: jpegData))
+        let pixel = try XCTUnwrap(jpegImage.rgbaPixel(at: CGPoint(x: 4, y: 4)))
+        XCTAssertGreaterThan(pixel.red, 230)
+        XCTAssertGreaterThan(pixel.green, 230)
+        XCTAssertGreaterThan(pixel.blue, 230)
+    }
+
     func testMonthGridMarksOutsideMonthSeparatelyFromUnregisteredDays() {
         let cells = PetCalendarDateRules.monthGrid(
             for: date(year: 2026, month: 6, day: 1),
@@ -120,5 +141,34 @@ private final class SpyCalendarWatermarkDrawer: CalendarWatermarkDrawing {
 
     func drawCalendarWatermark(mode: WatermarkMode, in context: CGContext, size: CGSize, bounds: CGRect) {
         callCount += 1
+    }
+}
+
+private extension UIImage {
+    func rgbaPixel(at point: CGPoint) -> (red: Int, green: Int, blue: Int, alpha: Int)? {
+        guard let cgImage else {
+            return nil
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        let x = min(max(Int(point.x), 0), width - 1)
+        let y = min(max(Int(point.y), 0), height - 1)
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let offset = (y * width + x) * 4
+        return (Int(data[offset]), Int(data[offset + 1]), Int(data[offset + 2]), Int(data[offset + 3]))
     }
 }

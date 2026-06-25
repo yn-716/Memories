@@ -95,7 +95,7 @@ private struct WidgetWatermark: View {
 
     var body: some View {
         let iconSide: CGFloat = compact ? 11 : 14
-        let label = compact ? "Memories" : "Memories Pet Life"
+        let label = "Memories Pet Life"
         let materialTint = widgetRenderingMode == .vibrant ? 0.06 : 0.14
 
         HStack(spacing: compact ? 3 : 5) {
@@ -107,9 +107,9 @@ private struct WidgetWatermark: View {
                 .opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.82)
 
             Text(label)
-                .font(.system(size: compact ? 8 : 9, weight: .semibold))
+                .font(.system(size: compact ? 7 : 9, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.74)
+                .minimumScaleFactor(0.58)
         }
         .foregroundStyle(Color.primary.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.70))
         .padding(.horizontal, compact ? 5 : 7)

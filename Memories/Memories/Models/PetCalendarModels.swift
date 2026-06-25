@@ -328,6 +328,54 @@ struct PetCalendarOverlayStyle: Codable, Hashable {
         fontStyle: .rounded
     )
 
+    private enum CodingKeys: String, CodingKey {
+        case isThemeIconVisible
+        case themeIcon
+        case themeIconCorner
+        case isWeatherIconVisible
+        case weatherIcon
+        case weatherIconCorner
+        case textColor
+        case accentColor
+        case fontStyle
+    }
+
+    init(
+        isThemeIconVisible: Bool,
+        themeIcon: PetCalendarThemeIcon?,
+        themeIconCorner: PetCalendarOverlayCorner,
+        isWeatherIconVisible: Bool,
+        weatherIcon: PetCalendarWeatherIcon?,
+        weatherIconCorner: PetCalendarOverlayCorner,
+        textColor: PetCalendarOverlayColorStyle,
+        accentColor: PetCalendarOverlayColorStyle,
+        fontStyle: PetCalendarOverlayFontStyle
+    ) {
+        self.isThemeIconVisible = isThemeIconVisible
+        self.themeIcon = themeIcon
+        self.themeIconCorner = themeIconCorner
+        self.isWeatherIconVisible = isWeatherIconVisible
+        self.weatherIcon = weatherIcon
+        self.weatherIconCorner = weatherIconCorner
+        self.textColor = textColor
+        self.accentColor = accentColor
+        self.fontStyle = fontStyle
+    }
+
+    init(from decoder: Decoder) throws {
+        let fallback = Self.default
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isThemeIconVisible = (try? container.decodeIfPresent(Bool.self, forKey: .isThemeIconVisible)) ?? fallback.isThemeIconVisible
+        themeIcon = (try? container.decodeIfPresent(PetCalendarThemeIcon.self, forKey: .themeIcon)) ?? fallback.themeIcon
+        themeIconCorner = (try? container.decodeIfPresent(PetCalendarOverlayCorner.self, forKey: .themeIconCorner)) ?? fallback.themeIconCorner
+        isWeatherIconVisible = (try? container.decodeIfPresent(Bool.self, forKey: .isWeatherIconVisible)) ?? fallback.isWeatherIconVisible
+        weatherIcon = (try? container.decodeIfPresent(PetCalendarWeatherIcon.self, forKey: .weatherIcon)) ?? fallback.weatherIcon
+        weatherIconCorner = (try? container.decodeIfPresent(PetCalendarOverlayCorner.self, forKey: .weatherIconCorner)) ?? fallback.weatherIconCorner
+        textColor = (try? container.decodeIfPresent(PetCalendarOverlayColorStyle.self, forKey: .textColor)) ?? fallback.textColor
+        accentColor = (try? container.decodeIfPresent(PetCalendarOverlayColorStyle.self, forKey: .accentColor)) ?? fallback.accentColor
+        fontStyle = (try? container.decodeIfPresent(PetCalendarOverlayFontStyle.self, forKey: .fontStyle)) ?? fallback.fontStyle
+    }
+
     var effectiveThemeIcon: PetCalendarThemeIcon? {
         isThemeIconVisible ? (themeIcon ?? .walk) : nil
     }

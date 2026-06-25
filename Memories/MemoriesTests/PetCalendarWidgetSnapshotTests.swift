@@ -78,6 +78,50 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
     }
 
+    func testWidgetSnapshotDecodesLegacyOverlayStyleWithoutWeatherKeys() throws {
+        let json = """
+        {
+          "updatedAt": "2026-06-25T00:00:00Z",
+          "selectedMonth": "2026-06-01T00:00:00Z",
+          "displayLanguage": "english",
+          "showsBranding": true,
+          "entries": [
+            {
+              "id": "2026-06-25",
+              "date": "2026-06-25T00:00:00Z",
+              "thumbnailFileName": "thumb.jpg",
+              "caption": "",
+              "photoPlacement": {
+                "scale": 1.4,
+                "offsetX": 0.1,
+                "offsetY": -0.2
+              },
+              "overlayStyle": {
+                "isThemeIconVisible": true,
+                "themeIcon": "walk",
+                "themeIconCorner": "topRight",
+                "textColor": "white",
+                "accentColor": "blue",
+                "fontStyle": "rounded"
+              }
+            }
+          ]
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: Data(json.utf8))
+        let entry = try XCTUnwrap(snapshot.entries.first)
+
+        XCTAssertEqual(entry.id, "2026-06-25")
+        XCTAssertEqual(entry.thumbnailFileName, "thumb.jpg")
+        XCTAssertEqual(entry.overlayStyle.effectiveThemeIcon, .walk)
+        XCTAssertNil(entry.overlayStyle.effectiveWeatherIcon)
+        XCTAssertEqual(entry.overlayStyle.weatherIconCorner, .bottomRight)
+        XCTAssertEqual(entry.overlayStyle.accentColor, .blue)
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         temporaryDirectories.append(directory)

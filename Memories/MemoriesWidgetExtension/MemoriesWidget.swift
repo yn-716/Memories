@@ -749,7 +749,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
         displayLanguage = try container.decodeIfPresent(WidgetPetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
         showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
-        entries = try container.decode([WidgetPetCalendarEntry].self, forKey: .entries)
+        entries = container.decodeLossyArray(WidgetPetCalendarEntry.self, forKey: .entries)
     }
 
     var todayEntry: WidgetPetCalendarEntry? {
@@ -919,6 +919,54 @@ struct WidgetPetCalendarOverlayStyle: Codable, Hashable {
         fontStyle: .rounded
     )
 
+    private enum CodingKeys: String, CodingKey {
+        case isThemeIconVisible
+        case themeIcon
+        case themeIconCorner
+        case isWeatherIconVisible
+        case weatherIcon
+        case weatherIconCorner
+        case textColor
+        case accentColor
+        case fontStyle
+    }
+
+    init(
+        isThemeIconVisible: Bool,
+        themeIcon: WidgetPetCalendarThemeIcon?,
+        themeIconCorner: WidgetPetCalendarOverlayCorner,
+        isWeatherIconVisible: Bool,
+        weatherIcon: WidgetPetCalendarWeatherIcon?,
+        weatherIconCorner: WidgetPetCalendarOverlayCorner,
+        textColor: WidgetPetCalendarOverlayColorStyle,
+        accentColor: WidgetPetCalendarOverlayColorStyle,
+        fontStyle: WidgetPetCalendarOverlayFontStyle
+    ) {
+        self.isThemeIconVisible = isThemeIconVisible
+        self.themeIcon = themeIcon
+        self.themeIconCorner = themeIconCorner
+        self.isWeatherIconVisible = isWeatherIconVisible
+        self.weatherIcon = weatherIcon
+        self.weatherIconCorner = weatherIconCorner
+        self.textColor = textColor
+        self.accentColor = accentColor
+        self.fontStyle = fontStyle
+    }
+
+    init(from decoder: Decoder) throws {
+        let fallback = Self.default
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isThemeIconVisible = (try? container.decodeIfPresent(Bool.self, forKey: .isThemeIconVisible)) ?? fallback.isThemeIconVisible
+        themeIcon = (try? container.decodeIfPresent(WidgetPetCalendarThemeIcon.self, forKey: .themeIcon)) ?? fallback.themeIcon
+        themeIconCorner = (try? container.decodeIfPresent(WidgetPetCalendarOverlayCorner.self, forKey: .themeIconCorner)) ?? fallback.themeIconCorner
+        isWeatherIconVisible = (try? container.decodeIfPresent(Bool.self, forKey: .isWeatherIconVisible)) ?? fallback.isWeatherIconVisible
+        weatherIcon = (try? container.decodeIfPresent(WidgetPetCalendarWeatherIcon.self, forKey: .weatherIcon)) ?? fallback.weatherIcon
+        weatherIconCorner = (try? container.decodeIfPresent(WidgetPetCalendarOverlayCorner.self, forKey: .weatherIconCorner)) ?? fallback.weatherIconCorner
+        textColor = (try? container.decodeIfPresent(WidgetPetCalendarOverlayColorStyle.self, forKey: .textColor)) ?? fallback.textColor
+        accentColor = (try? container.decodeIfPresent(WidgetPetCalendarOverlayColorStyle.self, forKey: .accentColor)) ?? fallback.accentColor
+        fontStyle = (try? container.decodeIfPresent(WidgetPetCalendarOverlayFontStyle.self, forKey: .fontStyle)) ?? fallback.fontStyle
+    }
+
     var effectiveThemeIcon: WidgetPetCalendarThemeIcon? {
         isThemeIconVisible ? (themeIcon ?? .walk) : nil
     }
@@ -1011,7 +1059,8 @@ private enum WidgetPetCalendarSnapshotStore {
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([WidgetPetCalendarEntry].self, from: data))?.sorted { $0.date < $1.date }
+        return (try? decoder.decode(WidgetPetCalendarEntryList.self, from: data).entries)?
+            .sorted { $0.date < $1.date }
     }
 
     static func thumbnail(for entry: WidgetPetCalendarEntry) -> UIImage? {
@@ -1035,6 +1084,48 @@ private enum WidgetPetCalendarSnapshotStore {
 
     private static var calendarDirectory: URL? {
         sharedDirectory?.deletingLastPathComponent()
+    }
+}
+
+private struct WidgetPetCalendarEntryList: Decodable {
+    var entries: [WidgetPetCalendarEntry]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var entries: [WidgetPetCalendarEntry] = []
+        while !container.isAtEnd {
+            if let entry = try? container.decode(WidgetPetCalendarEntry.self) {
+                entries.append(entry)
+            } else {
+                _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
+            }
+        }
+        self.entries = entries
+    }
+}
+
+private struct WidgetPetCalendarDiscardedValue: Decodable {}
+
+private extension KeyedDecodingContainer {
+    func decodeLossyArray<Element: Decodable>(_ type: Element.Type, forKey key: Key) -> [Element] {
+        (try? decode(WidgetPetCalendarLossyArray<Element>.self, forKey: key).elements) ?? []
+    }
+}
+
+private struct WidgetPetCalendarLossyArray<Element: Decodable>: Decodable {
+    var elements: [Element]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements: [Element] = []
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                elements.append(element)
+            } else {
+                _ = try? container.decode(WidgetPetCalendarDiscardedValue.self)
+            }
+        }
+        self.elements = elements
     }
 }
 

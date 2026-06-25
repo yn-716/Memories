@@ -215,7 +215,7 @@ struct PetCalendarRepository {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(snapshot)
-        try data.write(to: widgetSnapshotURL, options: protectedWriteOptions)
+        try data.write(to: widgetSnapshotURL, options: widgetReadableWriteOptions)
         protectItemIfPossible(at: widgetSnapshotURL)
     }
 
@@ -229,7 +229,7 @@ struct PetCalendarRepository {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(entries)
-        try data.write(to: indexURL, options: protectedWriteOptions)
+        try data.write(to: indexURL, options: widgetReadableWriteOptions)
         protectItemIfPossible(at: indexURL)
     }
 
@@ -248,7 +248,7 @@ struct PetCalendarRepository {
             throw PetCalendarRepositoryError.imageWriteFailed
         }
 
-        try data.write(to: url, options: protectedWriteOptions)
+        try data.write(to: url, options: widgetReadableWriteOptions)
         protectItemIfPossible(at: url)
     }
 
@@ -309,8 +309,8 @@ struct PetCalendarRepository {
         widgetDirectory.appendingPathComponent(PetCalendarWidgetSnapshot.fileName)
     }
 
-    private var protectedWriteOptions: Data.WritingOptions {
-        [.atomic, .completeFileProtection]
+    private var widgetReadableWriteOptions: Data.WritingOptions {
+        [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
     }
 
     private var protectedFileAttributes: [FileAttributeKey: Any] {

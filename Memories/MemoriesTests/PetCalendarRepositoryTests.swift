@@ -109,6 +109,41 @@ final class PetCalendarRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.entry(for: now)?.overlayStyle, .default)
     }
 
+    func testRepositorySavesWeatherOnlyCalendarEntry() throws {
+        let rootURL = makeTemporaryDirectory()
+        let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
+        let now = date(year: 2026, month: 6, day: 25)
+        var overlayStyle = PetCalendarOverlayStyle.default
+        overlayStyle.isWeatherIconVisible = true
+        overlayStyle.weatherIcon = .rainy
+        overlayStyle.weatherIconCorner = .topRight
+        overlayStyle.accentColor = .blue
+
+        let entry = try repository.save(
+            image: nil,
+            overlayStyle: overlayStyle,
+            for: now,
+            now: now
+        )
+
+        XCTAssertNil(entry.imageFileName)
+        XCTAssertNil(entry.thumbnailFileName)
+        XCTAssertNil(repository.image(for: entry))
+        XCTAssertNil(repository.thumbnail(for: entry))
+        XCTAssertEqual(repository.entry(for: now)?.overlayStyle, overlayStyle)
+
+        let snapshotURL = rootURL
+            .appendingPathComponent("PetCalendar/Widget", isDirectory: true)
+            .appendingPathComponent(PetCalendarWidgetSnapshot.fileName)
+        let data = try Data(contentsOf: snapshotURL)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
+
+        XCTAssertNil(snapshot.entries.first?.thumbnailFileName)
+        XCTAssertEqual(snapshot.entries.first?.overlayStyle, overlayStyle)
+    }
+
     func testRepositoryClampsSavedPhotoPlacement() throws {
         let repository = try makeRepository()
         let now = date(year: 2026, month: 6, day: 25)

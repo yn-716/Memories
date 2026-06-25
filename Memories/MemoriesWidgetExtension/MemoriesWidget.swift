@@ -109,7 +109,9 @@ private struct WidgetWatermark: View {
             Text(label)
                 .font(.system(size: compact ? 7 : 9, weight: .semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.58)
+                .minimumScaleFactor(0.45)
+                .allowsTightening(true)
+                .fixedSize(horizontal: true, vertical: false)
         }
         .foregroundStyle(Color.primary.opacity(widgetRenderingMode == .vibrant ? 0.92 : 0.70))
         .padding(.horizontal, compact ? 5 : 7)
@@ -159,10 +161,17 @@ private struct TodayWidgetView: View {
                    let image = WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) {
                     WidgetPlacedImage(image: image, placement: todayEntry.photoPlacement)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                } else {
+                } else if snapshot.todayEntry?.overlayStyle.effectiveWeatherIcon == nil {
                     WidgetPawShape()
                         .fill(Color.secondary.opacity(0.22))
                         .frame(width: 44, height: 44)
+                }
+
+                if let todayEntry = snapshot.todayEntry {
+                    WidgetWeatherIconLayer(
+                        style: todayEntry.overlayStyle,
+                        usesPhotoBackground: WidgetPetCalendarSnapshotStore.thumbnail(for: todayEntry) != nil
+                    )
                 }
             }
             .frame(maxWidth: .infinity)
@@ -257,6 +266,9 @@ private struct WidgetWeekDayCard: View {
     let index: Int
 
     var body: some View {
+        let hasPhoto = entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) } != nil
+        let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
+
         VStack(spacing: 3) {
             Text(day.weekdaySymbol)
                 .font(.system(size: 9, weight: .semibold))
@@ -268,7 +280,7 @@ private struct WidgetWeekDayCard: View {
                     .overlay {
                         if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                             WidgetPlacedImage(image: image, placement: entry.photoPlacement)
-                        } else {
+                        } else if !hasWeatherIcon {
                             WidgetPawShape()
                                 .fill(Color.secondary.opacity(day.isFuture ? 0.10 : 0.18))
                                 .padding(8)
@@ -284,10 +296,14 @@ private struct WidgetWeekDayCard: View {
                             .stroke(day.isToday ? Color.accentColor : Color.clear, lineWidth: 1.6)
                     }
 
+                if let entry {
+                    WidgetWeatherIconLayer(style: entry.overlayStyle, usesPhotoBackground: hasPhoto)
+                }
+
                 Text("\(day.day)")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(entry == nil ? Color.primary : Color.white)
-                    .shadow(color: entry == nil ? .clear : Color.black.opacity(0.35), radius: 1, y: 1)
+                    .foregroundStyle(hasPhoto ? Color.white : Color.primary)
+                    .shadow(color: hasPhoto ? Color.black.opacity(0.35) : .clear, radius: 1, y: 1)
                     .padding(3)
             }
             .aspectRatio(0.78, contentMode: .fit)
@@ -303,6 +319,9 @@ private struct WidgetMonthCell: View {
     let rowCount: Int
 
     var body: some View {
+        let hasPhoto = entry.flatMap { WidgetPetCalendarSnapshotStore.thumbnail(for: $0) } != nil
+        let hasWeatherIcon = entry?.overlayStyle.effectiveWeatherIcon != nil
+
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(Color.clear)
@@ -314,7 +333,7 @@ private struct WidgetMonthCell: View {
                 .overlay {
                     if let entry, let image = WidgetPetCalendarSnapshotStore.thumbnail(for: entry) {
                         WidgetPlacedImage(image: image, placement: entry.photoPlacement)
-                    } else if cell.isInDisplayedMonth {
+                    } else if cell.isInDisplayedMonth, !hasWeatherIcon {
                         WidgetPawShape()
                             .fill(Color.secondary.opacity(0.16))
                             .padding(isLarge ? 7 : 4)
@@ -330,11 +349,15 @@ private struct WidgetMonthCell: View {
                         .stroke(cell.isToday ? Color.accentColor : Color.clear, lineWidth: 1.5)
                 }
 
+            if let entry {
+                WidgetWeatherIconLayer(style: entry.overlayStyle, usesPhotoBackground: hasPhoto)
+            }
+
             if cell.isInDisplayedMonth {
                 Text("\(cell.day)")
                     .font(.system(size: isLarge ? 11 : 8, weight: .bold))
-                    .foregroundStyle(entry == nil ? Color.primary : Color.white)
-                    .shadow(color: entry == nil ? .clear : Color.black.opacity(0.32), radius: 1, y: 1)
+                    .foregroundStyle(hasPhoto ? Color.white : Color.primary)
+                    .shadow(color: hasPhoto ? Color.black.opacity(0.32) : .clear, radius: 1, y: 1)
                     .padding(2)
             }
         }
@@ -347,6 +370,58 @@ private struct WidgetMonthCell: View {
             return rowCount <= 5 ? 0.86 : 1.0
         }
         return rowCount <= 4 ? 0.68 : (rowCount == 5 ? 0.78 : 1.0)
+    }
+}
+
+private struct WidgetWeatherIconLayer: View {
+    let style: WidgetPetCalendarOverlayStyle
+    let usesPhotoBackground: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let icon = style.effectiveWeatherIcon {
+                let minSide = min(proxy.size.width, proxy.size.height)
+                let iconSide = max(minSide * 0.32, 12)
+                let inset = max(minSide * 0.10, 3)
+                let center = centerPoint(
+                    for: style.weatherIconCorner,
+                    size: proxy.size,
+                    iconSide: iconSide,
+                    inset: inset
+                )
+
+                Image(systemName: icon.symbolName)
+                    .font(.system(size: iconSide * 0.74, weight: .bold, design: .rounded))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundStyle(style.accentColor.color)
+                    .shadow(color: usesPhotoBackground ? Color.black.opacity(0.34) : Color.white.opacity(0.78), radius: 1.6, y: 0.8)
+                    .frame(width: iconSide, height: iconSide)
+                    .position(center)
+            }
+        }
+        .allowsHitTesting(false)
+        .widgetAccentable(false)
+    }
+
+    private func centerPoint(for corner: WidgetPetCalendarOverlayCorner, size: CGSize, iconSide: CGFloat, inset: CGFloat) -> CGPoint {
+        let x: CGFloat
+        let y: CGFloat
+
+        switch corner {
+        case .topLeft, .bottomLeft:
+            x = inset + iconSide / 2
+        case .topRight, .bottomRight:
+            x = size.width - inset - iconSide / 2
+        }
+
+        switch corner {
+        case .topLeft, .topRight:
+            y = inset + iconSide / 2
+        case .bottomLeft, .bottomRight:
+            y = size.height - inset - iconSide / 2
+        }
+
+        return CGPoint(x: x, y: y)
     }
 }
 
@@ -700,7 +775,7 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
 struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
-    var thumbnailFileName: String
+    var thumbnailFileName: String?
     var caption: String
     var photoPlacement: WidgetPhotoPlacement
     var overlayStyle: WidgetPetCalendarOverlayStyle
@@ -718,7 +793,7 @@ struct WidgetPetCalendarEntry: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
-        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(WidgetPhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
         overlayStyle = try container.decodeIfPresent(WidgetPetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default
@@ -919,12 +994,15 @@ private enum WidgetPetCalendarSnapshotStore {
     }
 
     static func thumbnail(for entry: WidgetPetCalendarEntry) -> UIImage? {
-        guard let directory = sharedDirectory?.deletingLastPathComponent() else {
+        guard
+            let directory = sharedDirectory?.deletingLastPathComponent(),
+            let thumbnailFileName = entry.thumbnailFileName
+        else {
             return nil
         }
         let thumbnailURL = directory
             .appendingPathComponent("Thumbnails", isDirectory: true)
-            .appendingPathComponent(entry.thumbnailFileName)
+            .appendingPathComponent(thumbnailFileName)
         return UIImage(contentsOfFile: thumbnailURL.path)
     }
 

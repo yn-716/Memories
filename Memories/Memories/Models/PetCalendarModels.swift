@@ -340,8 +340,8 @@ struct PetCalendarOverlayStyle: Codable, Hashable {
 struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
-    var imageFileName: String
-    var thumbnailFileName: String
+    var imageFileName: String?
+    var thumbnailFileName: String?
     var caption: String
     var photoPlacement: PhotoPlacement
     var overlayStyle: PetCalendarOverlayStyle
@@ -351,8 +351,8 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
     init(
         id: String,
         date: Date,
-        imageFileName: String,
-        thumbnailFileName: String,
+        imageFileName: String?,
+        thumbnailFileName: String?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
         overlayStyle: PetCalendarOverlayStyle = .default,
@@ -386,8 +386,8 @@ struct PetCalendarDayEntry: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
-        imageFileName = try container.decode(String.self, forKey: .imageFileName)
-        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        imageFileName = try container.decodeIfPresent(String.self, forKey: .imageFileName)
+        thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
         overlayStyle = try container.decodeIfPresent(PetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default

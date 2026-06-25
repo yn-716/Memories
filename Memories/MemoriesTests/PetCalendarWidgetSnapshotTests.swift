@@ -48,7 +48,8 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
         XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: repository.thumbnailURL(for: entry).path))
+        let thumbnailURL = try XCTUnwrap(repository.thumbnailURL(for: entry))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
     }
 
     func testWidgetSnapshotDecodesLegacyJSONWithoutLanguageBrandingOrOverlayStyle() throws {

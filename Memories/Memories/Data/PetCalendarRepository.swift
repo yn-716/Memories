@@ -68,6 +68,7 @@ struct PetCalendarRepository {
         image: UIImage?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
+        overlayStyle: PetCalendarOverlayStyle = .default,
         for date: Date,
         allowReplace: Bool = false,
         now: Date = Date()
@@ -75,7 +76,7 @@ struct PetCalendarRepository {
         guard PetCalendarDateRules.canRegisterPhoto(for: date, now: now, calendar: calendar) else {
             throw PetCalendarRepositoryError.futureDateNotAllowed
         }
-        guard let image else {
+        guard image != nil || overlayStyle.effectiveWeatherIcon != nil else {
             throw PetCalendarRepositoryError.imageMissing
         }
         _ = caption
@@ -90,24 +91,32 @@ struct PetCalendarRepository {
         }
 
         let nowDate = now
-        let imageFileName = "\(dateID)-\(UUID().uuidString)-image.jpg"
-        let thumbnailFileName = "\(dateID)-\(UUID().uuidString)-thumb.jpg"
-        try writeImage(
-            image,
-            maxLongSide: PetCalendarConstants.displayImageMaxLongSide,
-            quality: PetCalendarConstants.displayImageJPEGQuality,
-            to: imagesDirectory.appendingPathComponent(imageFileName)
-        )
-        try writeImage(
-            image,
-            maxLongSide: PetCalendarConstants.thumbnailMaxLongSide,
-            quality: PetCalendarConstants.thumbnailJPEGQuality,
-            to: thumbnailsDirectory.appendingPathComponent(thumbnailFileName)
-        )
+        let imageFileName: String?
+        let thumbnailFileName: String?
+        if let image {
+            let generatedImageFileName = "\(dateID)-\(UUID().uuidString)-image.jpg"
+            let generatedThumbnailFileName = "\(dateID)-\(UUID().uuidString)-thumb.jpg"
+            try writeImage(
+                image,
+                maxLongSide: PetCalendarConstants.displayImageMaxLongSide,
+                quality: PetCalendarConstants.displayImageJPEGQuality,
+                to: imagesDirectory.appendingPathComponent(generatedImageFileName)
+            )
+            try writeImage(
+                image,
+                maxLongSide: PetCalendarConstants.thumbnailMaxLongSide,
+                quality: PetCalendarConstants.thumbnailJPEGQuality,
+                to: thumbnailsDirectory.appendingPathComponent(generatedThumbnailFileName)
+            )
+            imageFileName = generatedImageFileName
+            thumbnailFileName = generatedThumbnailFileName
+        } else {
+            imageFileName = nil
+            thumbnailFileName = nil
+        }
 
         if let existing {
-            try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(existing.imageFileName))
-            try? fileManager.removeItem(at: thumbnailsDirectory.appendingPathComponent(existing.thumbnailFileName))
+            removeStoredImages(for: existing)
         }
 
         let entry = PetCalendarDayEntry(
@@ -117,7 +126,7 @@ struct PetCalendarRepository {
             thumbnailFileName: thumbnailFileName,
             caption: "",
             photoPlacement: photoPlacement.clamped,
-            overlayStyle: .default,
+            overlayStyle: overlayStyle,
             createdAt: existing?.createdAt ?? nowDate,
             updatedAt: nowDate
         )
@@ -140,21 +149,29 @@ struct PetCalendarRepository {
 
         entries.removeAll { $0.id == dateID }
         try writeIndex(entries)
-        try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(entry.imageFileName))
-        try? fileManager.removeItem(at: thumbnailsDirectory.appendingPathComponent(entry.thumbnailFileName))
+        removeStoredImages(for: entry)
         try writeWidgetSnapshot(entries: entries)
     }
 
     func image(for entry: PetCalendarDayEntry) -> UIImage? {
-        UIImage(contentsOfFile: imagesDirectory.appendingPathComponent(entry.imageFileName).path)
+        guard let imageFileName = entry.imageFileName else {
+            return nil
+        }
+        return UIImage(contentsOfFile: imagesDirectory.appendingPathComponent(imageFileName).path)
     }
 
     func thumbnail(for entry: PetCalendarDayEntry) -> UIImage? {
-        UIImage(contentsOfFile: thumbnailsDirectory.appendingPathComponent(entry.thumbnailFileName).path)
+        guard let thumbnailFileName = entry.thumbnailFileName else {
+            return nil
+        }
+        return UIImage(contentsOfFile: thumbnailsDirectory.appendingPathComponent(thumbnailFileName).path)
     }
 
-    func thumbnailURL(for entry: PetCalendarDayEntry) -> URL {
-        thumbnailsDirectory.appendingPathComponent(entry.thumbnailFileName)
+    func thumbnailURL(for entry: PetCalendarDayEntry) -> URL? {
+        guard let thumbnailFileName = entry.thumbnailFileName else {
+            return nil
+        }
+        return thumbnailsDirectory.appendingPathComponent(thumbnailFileName)
     }
 
     func storageSize() -> Int64 {
@@ -214,6 +231,15 @@ struct PetCalendarRepository {
         let data = try encoder.encode(entries)
         try data.write(to: indexURL, options: protectedWriteOptions)
         protectItemIfPossible(at: indexURL)
+    }
+
+    private func removeStoredImages(for entry: PetCalendarDayEntry) {
+        if let imageFileName = entry.imageFileName {
+            try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(imageFileName))
+        }
+        if let thumbnailFileName = entry.thumbnailFileName {
+            try? fileManager.removeItem(at: thumbnailsDirectory.appendingPathComponent(thumbnailFileName))
+        }
     }
 
     private func writeImage(_ image: UIImage, maxLongSide: CGFloat, quality: CGFloat, to url: URL) throws {
@@ -336,7 +362,7 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
 struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     var id: String
     var date: Date
-    var thumbnailFileName: String
+    var thumbnailFileName: String?
     var caption: String
     var photoPlacement: PhotoPlacement
     var overlayStyle: PetCalendarOverlayStyle
@@ -344,7 +370,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
     init(
         id: String,
         date: Date,
-        thumbnailFileName: String,
+        thumbnailFileName: String?,
         caption: String = "",
         photoPlacement: PhotoPlacement = .default,
         overlayStyle: PetCalendarOverlayStyle = .default
@@ -370,7 +396,7 @@ struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         date = try container.decode(Date.self, forKey: .date)
-        thumbnailFileName = try container.decode(String.self, forKey: .thumbnailFileName)
+        thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
         caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
         photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
         overlayStyle = try container.decodeIfPresent(PetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default

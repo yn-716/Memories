@@ -5,16 +5,19 @@ struct PetCalendarRenderEntry: Hashable {
     var date: Date
     var thumbnail: UIImage?
     var photoPlacement: PhotoPlacement = .default
+    var overlayStyle: PetCalendarOverlayStyle = .default
 
     static func == (lhs: PetCalendarRenderEntry, rhs: PetCalendarRenderEntry) -> Bool {
         PetCalendarDateRules.id(for: lhs.date) == PetCalendarDateRules.id(for: rhs.date)
             && lhs.thumbnail === rhs.thumbnail
             && lhs.photoPlacement == rhs.photoPlacement
+            && lhs.overlayStyle == rhs.overlayStyle
     }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(PetCalendarDateRules.id(for: date))
         hasher.combine(photoPlacement)
+        hasher.combine(overlayStyle)
         hasher.combine(thumbnail.map(ObjectIdentifier.init))
     }
 }
@@ -324,7 +327,9 @@ struct PetCalendarRenderer {
         } else {
             UIColor.white.withAlphaComponent(cell.isFuture ? 0.04 : 0.08).setFill()
             context.fill(rect)
-            drawPaw(in: rect.insetBy(dx: rect.width * 0.23, dy: rect.height * 0.22), alpha: cell.isFuture ? 0.08 : 0.18)
+            if entry?.overlayStyle.effectiveWeatherIcon == nil {
+                drawPaw(in: rect.insetBy(dx: rect.width * 0.23, dy: rect.height * 0.22), alpha: cell.isFuture ? 0.08 : 0.18)
+            }
         }
         context.restoreGState()
 
@@ -335,7 +340,7 @@ struct PetCalendarRenderer {
             todayPath.stroke()
         }
 
-        let numberColor: UIColor = entry == nil ? UIColor(hex: "#1F3447") : .white
+        let numberColor: UIColor = entry?.thumbnail == nil ? UIColor(hex: "#1F3447") : .white
         drawText(
             "\(cell.dayNumber)",
             in: CGRect(x: rect.minX + 12, y: rect.minY + 8, width: rect.width - 24, height: 30),
@@ -343,6 +348,10 @@ struct PetCalendarRenderer {
             color: numberColor.withAlphaComponent(cell.isFuture ? 0.38 : 0.94),
             alignment: .left
         )
+
+        if let entry, let weatherIcon = entry.overlayStyle.effectiveWeatherIcon {
+            drawWeatherIcon(weatherIcon, style: entry.overlayStyle, usesPhotoBackground: entry.thumbnail != nil, in: rect, context: context)
+        }
 
         if cell.isFuture {
             UIColor.white.withAlphaComponent(0.28).setFill()
@@ -373,6 +382,64 @@ struct PetCalendarRenderer {
     private func drawPaw(in rect: CGRect, alpha: CGFloat) {
         UIColor(hex: "#4F7FA3").withAlphaComponent(alpha).setFill()
         Self.drawPawPath(in: rect).fill()
+    }
+
+    private func drawWeatherIcon(
+        _ icon: PetCalendarWeatherIcon,
+        style: PetCalendarOverlayStyle,
+        usesPhotoBackground: Bool,
+        in rect: CGRect,
+        context: CGContext
+    ) {
+        let minSide = min(rect.width, rect.height)
+        let iconSide = max(minSide * 0.32, 24)
+        let inset = max(minSide * 0.10, 8)
+        let iconRect = CGRect(
+            x: weatherIconCenterX(for: style.weatherIconCorner, in: rect, iconSide: iconSide, inset: inset) - iconSide / 2,
+            y: weatherIconCenterY(for: style.weatherIconCorner, in: rect, iconSide: iconSide, inset: inset) - iconSide / 2,
+            width: iconSide,
+            height: iconSide
+        )
+        let configuration = UIImage.SymbolConfiguration(pointSize: iconSide * 0.74, weight: .bold)
+        guard let symbol = UIImage(systemName: icon.symbolName, withConfiguration: configuration) else {
+            return
+        }
+
+        context.saveGState()
+        let shadowColor = usesPhotoBackground
+            ? UIColor.black.withAlphaComponent(0.34)
+            : UIColor.white.withAlphaComponent(0.78)
+        context.setShadow(offset: CGSize(width: 0, height: 2), blur: 4, color: shadowColor.cgColor)
+        symbol.withTintColor(UIColor(hex: style.accentColor.hex), renderingMode: .alwaysOriginal).draw(in: iconRect)
+        context.restoreGState()
+    }
+
+    private func weatherIconCenterX(
+        for corner: PetCalendarOverlayCorner,
+        in rect: CGRect,
+        iconSide: CGFloat,
+        inset: CGFloat
+    ) -> CGFloat {
+        switch corner {
+        case .topLeft, .bottomLeft:
+            return rect.minX + inset + iconSide / 2
+        case .topRight, .bottomRight:
+            return rect.maxX - inset - iconSide / 2
+        }
+    }
+
+    private func weatherIconCenterY(
+        for corner: PetCalendarOverlayCorner,
+        in rect: CGRect,
+        iconSide: CGFloat,
+        inset: CGFloat
+    ) -> CGFloat {
+        switch corner {
+        case .topLeft, .topRight:
+            return rect.minY + inset + iconSide / 2
+        case .bottomLeft, .bottomRight:
+            return rect.maxY - inset - iconSide / 2
+        }
     }
 
     static func drawPawPath(in rect: CGRect) -> UIBezierPath {

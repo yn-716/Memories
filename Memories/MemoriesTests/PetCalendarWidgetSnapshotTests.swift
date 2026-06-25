@@ -48,6 +48,16 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
+        let renderedFileNames = [
+            try XCTUnwrap(snapshot.smallImageFileName),
+            try XCTUnwrap(snapshot.mediumImageFileName),
+            try XCTUnwrap(snapshot.largeImageFileName)
+        ]
+        for fileName in renderedFileNames {
+            let url = repository.widgetDirectoryURL.appendingPathComponent(fileName)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            XCTAssertGreaterThan((try? Data(contentsOf: url).count) ?? 0, 1_000)
+        }
         XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)
         let thumbnailURL = try XCTUnwrap(repository.thumbnailURL(for: entry))
         XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
@@ -75,6 +85,9 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.displayLanguage, .japanese)
         XCTAssertTrue(snapshot.showsBranding)
+        XCTAssertNil(snapshot.smallImageFileName)
+        XCTAssertNil(snapshot.mediumImageFileName)
+        XCTAssertNil(snapshot.largeImageFileName)
         XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)
         XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
     }

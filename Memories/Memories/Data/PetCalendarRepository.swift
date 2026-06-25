@@ -71,7 +71,11 @@ struct PetCalendarRepository {
         overlayStyle: PetCalendarOverlayStyle = .default,
         for date: Date,
         allowReplace: Bool = false,
-        now: Date = Date()
+        now: Date = Date(),
+        updatesWidgetSnapshot: Bool = true,
+        widgetSelectedMonth: Date? = nil,
+        widgetDisplayLanguage: PetCalendarDisplayLanguage = .japanese,
+        widgetShowsBranding: Bool = true
     ) throws -> PetCalendarDayEntry {
         guard PetCalendarDateRules.canRegisterPhoto(for: date, now: now, calendar: calendar) else {
             throw PetCalendarRepositoryError.futureDateNotAllowed
@@ -135,12 +139,24 @@ struct PetCalendarRepository {
         entries.append(entry)
         entries.sort { $0.date < $1.date }
         try writeIndex(entries)
-        try writeWidgetSnapshot(entries: entries)
+        if updatesWidgetSnapshot {
+            try writeWidgetSnapshot(
+                entries: entries,
+                selectedMonth: widgetSelectedMonth ?? date,
+                displayLanguage: widgetDisplayLanguage,
+                showsBranding: widgetShowsBranding
+            )
+        }
 
         return entry
     }
 
-    func deleteEntry(for date: Date) throws {
+    func deleteEntry(
+        for date: Date,
+        widgetSelectedMonth: Date? = nil,
+        widgetDisplayLanguage: PetCalendarDisplayLanguage = .japanese,
+        widgetShowsBranding: Bool = true
+    ) throws {
         let dateID = PetCalendarDateRules.id(for: date, calendar: calendar)
         var entries = loadEntries()
         guard let entry = entries.first(where: { $0.id == dateID }) else {
@@ -150,7 +166,12 @@ struct PetCalendarRepository {
         entries.removeAll { $0.id == dateID }
         try writeIndex(entries)
         removeStoredImages(for: entry)
-        try writeWidgetSnapshot(entries: entries)
+        try writeWidgetSnapshot(
+            entries: entries,
+            selectedMonth: widgetSelectedMonth ?? date,
+            displayLanguage: widgetDisplayLanguage,
+            showsBranding: widgetShowsBranding
+        )
     }
 
     func image(for entry: PetCalendarDayEntry) -> UIImage? {
@@ -194,12 +215,13 @@ struct PetCalendarRepository {
         showsBranding: Bool = true
     ) throws {
         try ensureDirectories()
-        let snapshot = PetCalendarWidgetSnapshot(
+        let currentEntries = entries ?? loadEntries()
+        var snapshot = PetCalendarWidgetSnapshot(
             updatedAt: Date(),
             selectedMonth: PetCalendarDateRules.monthStart(for: selectedMonth, calendar: calendar),
             displayLanguage: displayLanguage,
             showsBranding: showsBranding,
-            entries: (entries ?? loadEntries()).map { entry in
+            entries: currentEntries.map { entry in
                 PetCalendarWidgetEntry(
                     id: entry.id,
                     date: entry.date,
@@ -211,6 +233,10 @@ struct PetCalendarRepository {
                 )
             }
         )
+        let renderedImageNames = try writeWidgetRenderedImages(snapshot: snapshot, entries: currentEntries)
+        snapshot.smallImageFileName = renderedImageNames.small
+        snapshot.mediumImageFileName = renderedImageNames.medium
+        snapshot.largeImageFileName = renderedImageNames.large
 
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -232,6 +258,36 @@ struct PetCalendarRepository {
         let data = try encoder.encode(entries)
         try data.write(to: indexURL, options: widgetReadableWriteOptions)
         protectItemIfPossible(at: indexURL)
+    }
+
+    private func writeWidgetRenderedImages(
+        snapshot: PetCalendarWidgetSnapshot,
+        entries: [PetCalendarDayEntry]
+    ) throws -> PetCalendarWidgetRenderedImageNames {
+        let thumbnailsByID = Dictionary(uniqueKeysWithValues: entries.compactMap { entry in
+            thumbnail(for: entry).map { (entry.id, $0) }
+        })
+        let renderedImages = PetCalendarWidgetRenderer().renderAll(
+            snapshot: snapshot,
+            entries: entries,
+            thumbnailsByID: thumbnailsByID,
+            now: Date()
+        )
+
+        for renderedImage in renderedImages {
+            guard let data = renderedImage.image.jpegData(compressionQuality: 0.84) else {
+                throw PetCalendarRepositoryError.imageWriteFailed
+            }
+            let url = widgetDirectory.appendingPathComponent(renderedImage.fileName)
+            try data.write(to: url, options: widgetReadableWriteOptions)
+            protectItemIfPossible(at: url)
+        }
+
+        return PetCalendarWidgetRenderedImageNames(
+            small: PetCalendarWidgetRenderedImageFamily.small.fileName,
+            medium: PetCalendarWidgetRenderedImageFamily.medium.fileName,
+            large: PetCalendarWidgetRenderedImageFamily.large.fileName
+        )
     }
 
     private func removeStoredImages(for entry: PetCalendarDayEntry) {
@@ -327,6 +383,9 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
     var selectedMonth: Date
     var displayLanguage: PetCalendarDisplayLanguage
     var showsBranding: Bool
+    var smallImageFileName: String?
+    var mediumImageFileName: String?
+    var largeImageFileName: String?
     var entries: [PetCalendarWidgetEntry]
 
     init(
@@ -334,12 +393,18 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
         selectedMonth: Date,
         displayLanguage: PetCalendarDisplayLanguage = .japanese,
         showsBranding: Bool = true,
+        smallImageFileName: String? = nil,
+        mediumImageFileName: String? = nil,
+        largeImageFileName: String? = nil,
         entries: [PetCalendarWidgetEntry]
     ) {
         self.updatedAt = updatedAt
         self.selectedMonth = selectedMonth
         self.displayLanguage = displayLanguage
         self.showsBranding = showsBranding
+        self.smallImageFileName = smallImageFileName
+        self.mediumImageFileName = mediumImageFileName
+        self.largeImageFileName = largeImageFileName
         self.entries = entries
     }
 
@@ -348,6 +413,9 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
         case selectedMonth
         case displayLanguage
         case showsBranding
+        case smallImageFileName
+        case mediumImageFileName
+        case largeImageFileName
         case entries
     }
 
@@ -357,8 +425,17 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
         selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
         displayLanguage = try container.decodeIfPresent(PetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
         showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
+        smallImageFileName = try container.decodeIfPresent(String.self, forKey: .smallImageFileName)
+        mediumImageFileName = try container.decodeIfPresent(String.self, forKey: .mediumImageFileName)
+        largeImageFileName = try container.decodeIfPresent(String.self, forKey: .largeImageFileName)
         entries = try container.decode([PetCalendarWidgetEntry].self, forKey: .entries)
     }
+}
+
+struct PetCalendarWidgetRenderedImageNames: Codable, Hashable {
+    var small: String
+    var medium: String
+    var large: String
 }
 
 struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {

@@ -1191,13 +1191,10 @@ struct PetCalendarDayEditorView: View {
                 photoPlacement: photoPlacement,
                 overlayStyle: overlayStyle,
                 for: registrationDate,
-                allowReplace: allowReplace
-            )
-            try? repository.writeWidgetSnapshot(
-                entries: repository.loadEntries(),
-                selectedMonth: registrationDate,
-                displayLanguage: appState.petCalendarDisplayLanguage,
-                showsBranding: !appState.watermarkPolicy().snapshot.hasUnlimitedAccess
+                allowReplace: allowReplace,
+                widgetSelectedMonth: registrationDate,
+                widgetDisplayLanguage: appState.petCalendarDisplayLanguage,
+                widgetShowsBranding: !appState.watermarkPolicy().snapshot.hasUnlimitedAccess
             )
             reloadWidgetTimelines()
             onSaved()
@@ -1212,7 +1209,12 @@ struct PetCalendarDayEditorView: View {
             return
         }
         do {
-            try repository.deleteEntry(for: registrationDate)
+            try repository.deleteEntry(
+                for: registrationDate,
+                widgetSelectedMonth: registrationDate,
+                widgetDisplayLanguage: appState.petCalendarDisplayLanguage,
+                widgetShowsBranding: !appState.watermarkPolicy().snapshot.hasUnlimitedAccess
+            )
             reloadWidgetTimelines()
             onSaved()
             dismiss()
@@ -1366,9 +1368,16 @@ struct PetCalendarImportView: View {
                     image: plan.candidate.image,
                     caption: "",
                     for: plan.date,
-                    allowReplace: plan.replacesExisting
+                    allowReplace: plan.replacesExisting,
+                    updatesWidgetSnapshot: false
                 )
             }
+            try? repository.writeWidgetSnapshot(
+                entries: repository.loadEntries(),
+                selectedMonth: Date(),
+                displayLanguage: appState.petCalendarDisplayLanguage,
+                showsBranding: !appState.watermarkPolicy().snapshot.hasUnlimitedAccess
+            )
             reloadWidgetTimelines()
             onSaved()
             dismiss()
@@ -1849,16 +1858,12 @@ private struct PetCalendarAlert: Identifiable {
 private func reloadWidgetTimelines() {
     #if canImport(WidgetKit)
     if #available(iOS 14.0, *) {
-        func reload() {
+        let reload = {
             WidgetCenter.shared.reloadTimelines(ofKind: "MemoriesWidget")
-            WidgetCenter.shared.reloadAllTimelines()
         }
 
         reload()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            reload()
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             reload()
         }
     }

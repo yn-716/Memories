@@ -8,21 +8,31 @@ private let snapshotFileName = "pet-calendar-widget-snapshot.json"
 struct MemoriesWidgetEntry: TimelineEntry {
     let date: Date
     let snapshot: WidgetPetCalendarSnapshot
+    let renderedImage: UIImage?
 }
 
 struct MemoriesWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> MemoriesWidgetEntry {
-        MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load())
+        makeEntry(for: context)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (MemoriesWidgetEntry) -> Void) {
-        completion(MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load()))
+        completion(makeEntry(for: context))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<MemoriesWidgetEntry>) -> Void) {
-        let entry = MemoriesWidgetEntry(date: Date(), snapshot: WidgetPetCalendarSnapshotStore.load())
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date().addingTimeInterval(1800)
+        let entry = makeEntry(for: context)
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date().addingTimeInterval(900)
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+    }
+
+    private func makeEntry(for context: Context) -> MemoriesWidgetEntry {
+        let snapshot = WidgetPetCalendarSnapshotStore.load()
+        return MemoriesWidgetEntry(
+            date: Date(),
+            snapshot: snapshot,
+            renderedImage: WidgetPetCalendarSnapshotStore.renderedImage(for: context.family, snapshot: snapshot)
+        )
     }
 }
 
@@ -65,29 +75,50 @@ private struct MemoriesWidgetView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch family {
-        case .systemSmall:
-            TodayWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar/today"))
-        case .systemMedium:
-            WeekWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar"))
-        case .systemLarge:
-            MonthWidgetView(snapshot: entry.snapshot, isLarge: true)
-                .widgetURL(URL(string: "memories://calendar"))
-        case .accessoryInline:
-            AccessoryInlineWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar/today"))
-        case .accessoryCircular:
-            AccessoryCircularWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar/today"))
-        case .accessoryRectangular:
-            AccessoryRectangularWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar/today"))
-        default:
-            TodayWidgetView(snapshot: entry.snapshot)
-                .widgetURL(URL(string: "memories://calendar/today"))
+        Group {
+            if let renderedImage = entry.renderedImage {
+                RenderedWidgetImageView(image: renderedImage)
+            } else {
+                WidgetFallbackView(snapshot: entry.snapshot)
+            }
         }
+        .widgetURL(family == .systemSmall ? URL(string: "memories://calendar/today") : URL(string: "memories://calendar"))
+    }
+}
+
+private struct RenderedWidgetImageView: View {
+    let image: UIImage
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .widgetAccentable(false)
+    }
+}
+
+private struct WidgetFallbackView: View {
+    let snapshot: WidgetPetCalendarSnapshot
+
+    var body: some View {
+        ZStack {
+            WidgetAquaSurface(cornerRadius: 16)
+            VStack(spacing: 6) {
+                Text(WidgetCalendarDateRules.monthTitle(for: snapshot.selectedMonth, language: snapshot.displayLanguage))
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(WidgetCalendarColors.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.70)
+                Text("Memories Pet Life")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(WidgetCalendarColors.mutedText)
+                    .lineLimit(1)
+            }
+            .padding(14)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -772,6 +803,9 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
     var selectedMonth: Date
     var displayLanguage: WidgetPetCalendarDisplayLanguage
     var showsBranding: Bool
+    var smallImageFileName: String?
+    var mediumImageFileName: String?
+    var largeImageFileName: String?
     var entries: [WidgetPetCalendarEntry]
 
     static let placeholder = WidgetPetCalendarSnapshot(
@@ -779,6 +813,9 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         selectedMonth: Date(),
         displayLanguage: .japanese,
         showsBranding: true,
+        smallImageFileName: nil,
+        mediumImageFileName: nil,
+        largeImageFileName: nil,
         entries: []
     )
 
@@ -787,6 +824,9 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         case selectedMonth
         case displayLanguage
         case showsBranding
+        case smallImageFileName
+        case mediumImageFileName
+        case largeImageFileName
         case entries
     }
 
@@ -795,12 +835,18 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         selectedMonth: Date,
         displayLanguage: WidgetPetCalendarDisplayLanguage = .japanese,
         showsBranding: Bool = true,
+        smallImageFileName: String? = nil,
+        mediumImageFileName: String? = nil,
+        largeImageFileName: String? = nil,
         entries: [WidgetPetCalendarEntry]
     ) {
         self.updatedAt = updatedAt
         self.selectedMonth = selectedMonth
         self.displayLanguage = displayLanguage
         self.showsBranding = showsBranding
+        self.smallImageFileName = smallImageFileName
+        self.mediumImageFileName = mediumImageFileName
+        self.largeImageFileName = largeImageFileName
         self.entries = entries
     }
 
@@ -810,6 +856,9 @@ struct WidgetPetCalendarSnapshot: Codable, Hashable {
         selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
         displayLanguage = try container.decodeIfPresent(WidgetPetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
         showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
+        smallImageFileName = try container.decodeIfPresent(String.self, forKey: .smallImageFileName)
+        mediumImageFileName = try container.decodeIfPresent(String.self, forKey: .mediumImageFileName)
+        largeImageFileName = try container.decodeIfPresent(String.self, forKey: .largeImageFileName)
         entries = container.decodeLossyArray(WidgetPetCalendarEntry.self, forKey: .entries)
     }
 
@@ -1095,11 +1144,7 @@ private enum WidgetPhotoPlacementLayout {
 
 private enum WidgetPetCalendarSnapshotStore {
     static func load() -> WidgetPetCalendarSnapshot {
-        var snapshot = loadSnapshot()
-        if let entries = loadIndexEntries() {
-            snapshot.entries = entries
-        }
-        return snapshot
+        loadSnapshot()
     }
 
     private static func loadSnapshot() -> WidgetPetCalendarSnapshot {
@@ -1153,6 +1198,29 @@ private enum WidgetPetCalendarSnapshotStore {
             }
         }
         return nil
+    }
+
+    static func renderedImage(for family: WidgetFamily, snapshot: WidgetPetCalendarSnapshot) -> UIImage? {
+        guard let directory = sharedDirectory else {
+            return nil
+        }
+
+        let fileName: String?
+        switch family {
+        case .systemSmall:
+            fileName = snapshot.smallImageFileName
+        case .systemMedium:
+            fileName = snapshot.mediumImageFileName
+        case .systemLarge:
+            fileName = snapshot.largeImageFileName
+        default:
+            fileName = snapshot.smallImageFileName
+        }
+
+        guard let fileName else {
+            return nil
+        }
+        return UIImage(contentsOfFile: directory.appendingPathComponent(fileName).path)
     }
 
     private static var sharedDirectory: URL? {

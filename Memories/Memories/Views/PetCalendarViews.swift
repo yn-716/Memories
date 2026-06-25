@@ -234,6 +234,9 @@ struct PetCalendarMonthView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
 
     var body: some View {
+        let monthCells = cells
+        let rowCount = max(1, monthCells.count / 7)
+
         PetCalendarGlassPanel {
             VStack(spacing: 8) {
                 LazyVGrid(columns: columns, spacing: 4) {
@@ -245,11 +248,12 @@ struct PetCalendarMonthView: View {
                             .frame(height: 24)
                     }
 
-                    ForEach(cells) { cell in
+                    ForEach(monthCells) { cell in
                         PetCalendarDayCell(
                             cell: cell,
                             entry: entriesByID[cell.id],
-                            thumbnail: thumbnail(for: entriesByID[cell.id])
+                            thumbnail: thumbnail(for: entriesByID[cell.id]),
+                            rowCount: rowCount
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -285,6 +289,7 @@ private struct PetCalendarDayCell: View {
     let cell: PetCalendarMonthCell
     let entry: PetCalendarDayEntry?
     let thumbnail: UIImage?
+    let rowCount: Int
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -327,7 +332,7 @@ private struct PetCalendarDayCell: View {
                 usesPhotoBackground: thumbnail != nil
             )
         }
-        .aspectRatio(PetCalendarCellMetrics.aspectRatio, contentMode: .fit)
+        .aspectRatio(PetCalendarCellMetrics.aspectRatio(forRowCount: rowCount), contentMode: .fit)
         .opacity(cell.isFuture ? 0.44 : 1)
     }
 
@@ -347,13 +352,23 @@ private struct PetCalendarDayCell: View {
 }
 
 private enum PetCalendarCellMetrics {
-    static let aspectRatio: CGFloat = 0.78
+    static let defaultAspectRatio: CGFloat = 0.78
     static let cornerRadius: CGFloat = 8
     static let dateFontRatio: CGFloat = 0.24
     static let dateMinimumFont: CGFloat = 11
     static let dateInsetRatio: CGFloat = 0.08
     static let dateMinimumInset: CGFloat = 4
     static let registeredFrame = Color(hex: "#93C8ED")
+
+    static func aspectRatio(forRowCount rowCount: Int) -> CGFloat {
+        if rowCount <= 4 {
+            return 0.60
+        }
+        if rowCount == 5 {
+            return 0.68
+        }
+        return defaultAspectRatio
+    }
 }
 
 private struct PetCalendarDateGuideLayer: View {
@@ -398,9 +413,9 @@ private struct PetCalendarGlassPanel<Content: View>: View {
             .background(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(0.14),
-                        Color(hex: "#D8F5FF").opacity(0.18),
-                        Color(hex: "#76B7E3").opacity(0.10)
+                        Color.white.opacity(0.10),
+                        Color.white.opacity(0.06),
+                        Color(hex: "#EDF6FA").opacity(0.08)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -423,9 +438,9 @@ private struct PetCalendarGlassPanel<Content: View>: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.82),
-                                Color(hex: "#A7DFFF").opacity(0.70),
-                                MemoriesTheme.border.opacity(0.36)
+                                Color.white.opacity(0.74),
+                                Color(hex: "#DCEBF1").opacity(0.48),
+                                MemoriesTheme.border.opacity(0.24)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -448,9 +463,9 @@ private struct PetCalendarAquaBackdrop: View {
         LinearGradient(
             colors: [
                 Color(hex: "#F5FBFF"),
-                Color(hex: "#DDF6FF"),
-                Color(hex: "#B9E7FF"),
-                Color(hex: "#F7FCFF")
+                Color(hex: "#F8FCFF"),
+                Color(hex: "#EEF7FB"),
+                Color(hex: "#FFFFFF")
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -460,7 +475,7 @@ private struct PetCalendarAquaBackdrop: View {
                 colors: [
                     Color.white.opacity(0.0),
                     Color.white.opacity(0.54),
-                    Color(hex: "#6AD7FF").opacity(0.18),
+                    Color(hex: "#BFEAF7").opacity(0.08),
                     Color.white.opacity(0.0)
                 ],
                 startPoint: .top,
@@ -473,8 +488,8 @@ private struct PetCalendarAquaBackdrop: View {
             LinearGradient(
                 colors: [
                     Color.white.opacity(0.0),
-                    Color(hex: "#86D9FF").opacity(0.22),
-                    Color.white.opacity(0.32),
+                    Color(hex: "#D4EEF6").opacity(0.10),
+                    Color.white.opacity(0.20),
                     Color.white.opacity(0.0)
                 ],
                 startPoint: .top,
@@ -495,9 +510,9 @@ private struct PetCalendarAquaSurface: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDimmed ? 0.06 : 0.12),
-                        Color(hex: "#D8F5FF").opacity(isDimmed ? 0.08 : 0.16),
-                        Color(hex: "#61C7F2").opacity(isDimmed ? 0.04 : 0.10)
+                        Color.white.opacity(isDimmed ? 0.04 : 0.10),
+                        Color.white.opacity(isDimmed ? 0.03 : 0.07),
+                        Color(hex: "#EDF6FA").opacity(isDimmed ? 0.04 : 0.08)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -510,8 +525,8 @@ private struct PetCalendarAquaSurface: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isDimmed ? 0.22 : 0.64),
-                                Color(hex: "#8BDEFF").opacity(isDimmed ? 0.14 : 0.50)
+                                Color.white.opacity(isDimmed ? 0.18 : 0.58),
+                                Color(hex: "#D8E8EF").opacity(isDimmed ? 0.12 : 0.42)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -606,7 +621,7 @@ private struct PetCalendarPhotoPlacementPreview: View {
             }
             .gesture(adjustmentGesture(frameRect: frameRect))
         }
-        .aspectRatio(PetCalendarCellMetrics.aspectRatio, contentMode: .fit)
+        .aspectRatio(PetCalendarCellMetrics.defaultAspectRatio, contentMode: .fit)
         .frame(maxWidth: .infinity)
     }
 

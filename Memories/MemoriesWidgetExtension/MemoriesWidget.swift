@@ -148,6 +148,9 @@ private struct MonthWidgetView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
 
     var body: some View {
+        let cells = WidgetCalendarDateRules.monthGrid(for: snapshot.selectedMonth)
+        let rowCount = max(1, cells.count / 7)
+
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(monthTitle)
@@ -169,8 +172,8 @@ private struct MonthWidgetView: View {
                         .frame(maxWidth: .infinity)
                 }
 
-                ForEach(WidgetCalendarDateRules.monthGrid(for: snapshot.selectedMonth), id: \.id) { cell in
-                    WidgetMonthCell(cell: cell, entry: snapshot.entryByID[cell.id], isLarge: isLarge)
+                ForEach(cells, id: \.id) { cell in
+                    WidgetMonthCell(cell: cell, entry: snapshot.entryByID[cell.id], isLarge: isLarge, rowCount: rowCount)
                 }
             }
         }
@@ -267,6 +270,7 @@ private struct WidgetMonthCell: View {
     let cell: WidgetMonthCellModel
     let entry: WidgetPetCalendarEntry?
     let isLarge: Bool
+    let rowCount: Int
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -304,8 +308,15 @@ private struct WidgetMonthCell: View {
                     .padding(2)
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(aspectRatio, contentMode: .fit)
         .opacity(cell.isFuture ? 0.42 : 1)
+    }
+
+    private var aspectRatio: CGFloat {
+        if !isLarge {
+            return rowCount <= 5 ? 0.86 : 1.0
+        }
+        return rowCount <= 4 ? 0.68 : (rowCount == 5 ? 0.78 : 1.0)
     }
 }
 
@@ -474,9 +485,9 @@ private struct WidgetAquaBackground: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color.white.opacity(0.14),
-                Color(red: 0.73, green: 0.92, blue: 1.0).opacity(0.20),
-                Color(red: 0.44, green: 0.72, blue: 0.92).opacity(0.14)
+                Color.white.opacity(0.12),
+                Color(red: 0.94, green: 0.98, blue: 1.0).opacity(0.10),
+                Color(red: 0.86, green: 0.93, blue: 0.96).opacity(0.08)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -493,9 +504,9 @@ private struct WidgetAquaSurface: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.white.opacity(isDimmed ? 0.06 : 0.14),
-                        Color(red: 0.74, green: 0.91, blue: 1.0).opacity(isDimmed ? 0.06 : 0.16),
-                        Color(red: 0.24, green: 0.55, blue: 0.74).opacity(isDimmed ? 0.03 : 0.08)
+                        Color.white.opacity(isDimmed ? 0.04 : 0.10),
+                        Color(red: 0.95, green: 0.98, blue: 1.0).opacity(isDimmed ? 0.04 : 0.08),
+                        Color(red: 0.78, green: 0.88, blue: 0.93).opacity(isDimmed ? 0.03 : 0.06)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -506,8 +517,8 @@ private struct WidgetAquaSurface: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isDimmed ? 0.18 : 0.72),
-                                Color(red: 0.58, green: 0.83, blue: 0.98).opacity(isDimmed ? 0.12 : 0.52)
+                                Color.white.opacity(isDimmed ? 0.18 : 0.60),
+                                Color(red: 0.82, green: 0.90, blue: 0.94).opacity(isDimmed ? 0.12 : 0.42)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -570,12 +581,14 @@ private struct WidgetPlacedImage: View {
     @ViewBuilder
     private func fullColorImage(drawRect: CGRect) -> some View {
         if widgetRenderingMode == .vibrant {
-            Canvas { context, _ in
-                context.draw(Image(uiImage: image), in: drawRect)
-            }
-            .drawingGroup(opaque: false, colorMode: .extendedLinear)
-            .saturation(1.35)
-            .contrast(1.10)
+            Image(uiImage: image)
+                .resizable()
+                .frame(width: drawRect.width, height: drawRect.height)
+                .position(x: drawRect.midX, y: drawRect.midY)
+                .brightness(-0.32)
+                .contrast(2.10)
+                .saturation(1.25)
+                .drawingGroup(opaque: false, colorMode: .linear)
         } else if #available(iOS 18.0, *) {
             Image(uiImage: image)
                 .resizable()
@@ -1061,11 +1074,18 @@ private enum WidgetCalendarDateRules {
         let monthStart = monthStart(for: month)
         let leadingDays = (calendar.component(.weekday, from: monthStart) - calendar.firstWeekday + 7) % 7
         let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart) ?? monthStart
+        let monthInterval = calendar.dateInterval(of: .month, for: monthStart)
+        let lastMonthDate = monthInterval
+            .flatMap { calendar.date(byAdding: .day, value: -1, to: $0.end) }
+            ?? monthStart
+        let trailingDays = (calendar.firstWeekday + 6 - calendar.component(.weekday, from: lastMonthDate) + 7) % 7
+        let gridEnd = calendar.date(byAdding: .day, value: trailingDays + 1, to: lastMonthDate) ?? lastMonthDate
+        let dayCount = max(28, calendar.dateComponents([.day], from: gridStart, to: gridEnd).day ?? 42)
         let displayedMonth = calendar.component(.month, from: monthStart)
         let displayedYear = calendar.component(.year, from: monthStart)
         let todayID = id(for: Date())
 
-        return (0..<42).compactMap { offset in
+        return (0..<dayCount).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else {
                 return nil
             }

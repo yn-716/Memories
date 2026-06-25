@@ -450,11 +450,18 @@ enum PetCalendarDateRules {
         let weekday = calendar.component(.weekday, from: monthStart)
         let leadingDays = (weekday - calendar.firstWeekday + 7) % 7
         let gridStart = calendar.date(byAdding: .day, value: -leadingDays, to: monthStart) ?? monthStart
+        let monthInterval = calendar.dateInterval(of: .month, for: monthStart)
+        let lastMonthDate = monthInterval
+            .flatMap { calendar.date(byAdding: .day, value: -1, to: $0.end) }
+            ?? monthStart
+        let trailingDays = (calendar.firstWeekday + 6 - calendar.component(.weekday, from: lastMonthDate) + 7) % 7
+        let gridEnd = calendar.date(byAdding: .day, value: trailingDays + 1, to: lastMonthDate) ?? lastMonthDate
+        let dayCount = max(28, calendar.dateComponents([.day], from: gridStart, to: gridEnd).day ?? 42)
         let displayedMonth = calendar.component(.month, from: monthStart)
         let displayedYear = calendar.component(.year, from: monthStart)
         let todayID = id(for: now, calendar: calendar)
 
-        return (0..<42).compactMap { offset in
+        return (0..<dayCount).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else {
                 return nil
             }

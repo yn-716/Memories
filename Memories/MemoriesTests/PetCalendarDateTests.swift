@@ -20,11 +20,12 @@ final class PetCalendarDateTests: XCTestCase {
 
         let cells = PetCalendarDateRules.monthGrid(for: month, now: now, calendar: calendar)
 
-        XCTAssertEqual(cells.count, 42)
+        XCTAssertEqual(cells.count, 35)
         XCTAssertEqual(cells[0].id, "2026-05-31")
         XCTAssertFalse(cells[0].isInDisplayedMonth)
         XCTAssertEqual(cells[1].id, "2026-06-01")
         XCTAssertTrue(cells[1].isInDisplayedMonth)
+        XCTAssertEqual(cells.last?.id, "2026-07-04")
     }
 
     func testMonthGridSupportsSixWeekMonths() {

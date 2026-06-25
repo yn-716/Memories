@@ -142,10 +142,10 @@ struct PetCalendarRenderer {
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let colors = [
-            UIColor(hex: "#F5FBFF").withAlphaComponent(0.78).cgColor,
-            UIColor(hex: "#CFF2FF").withAlphaComponent(0.48).cgColor,
-            UIColor(hex: "#8AD7F7").withAlphaComponent(0.28).cgColor,
-            UIColor(hex: "#FFFFFF").withAlphaComponent(0.36).cgColor
+            UIColor(hex: "#FAFDFF").withAlphaComponent(0.72).cgColor,
+            UIColor(hex: "#F2F9FC").withAlphaComponent(0.42).cgColor,
+            UIColor(hex: "#E4F1F6").withAlphaComponent(0.24).cgColor,
+            UIColor(hex: "#FFFFFF").withAlphaComponent(0.34).cgColor
         ] as CFArray
         let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: [0, 0.42, 0.78, 1])
         context.drawLinearGradient(
@@ -174,8 +174,8 @@ struct PetCalendarRenderer {
             context: context,
             colors: [
                 UIColor.white.withAlphaComponent(0.22),
-                UIColor(hex: "#D7F6FF").withAlphaComponent(0.20),
-                UIColor(hex: "#6BC7F2").withAlphaComponent(0.12)
+                UIColor(hex: "#F3FAFD").withAlphaComponent(0.16),
+                UIColor(hex: "#DDECF2").withAlphaComponent(0.10)
             ]
         )
         context.restoreGState()
@@ -184,7 +184,7 @@ struct PetCalendarRenderer {
         path.lineWidth = 3
         path.stroke()
 
-        UIColor(hex: "#86D9FF").withAlphaComponent(0.46).setStroke()
+        UIColor(hex: "#D7E8EF").withAlphaComponent(0.42).setStroke()
         path.lineWidth = 1.5
         path.stroke()
     }
@@ -209,9 +209,7 @@ struct PetCalendarRenderer {
 
         let weekdayTop = content.minY + 124
         let gridTop = weekdayTop + 70
-        let gridHeight = content.height - 260
         let cellWidth = content.width / 7
-        let cellHeight = gridHeight / 6
         let weekdays = PetCalendarDateRules.weekdaySymbols(language: configuration.displayLanguage)
 
         for index in 0..<7 {
@@ -232,6 +230,9 @@ struct PetCalendarRenderer {
             now: configuration.now,
             calendar: calendar
         )
+        let rowCount = max(1, cells.count / 7)
+        let gridHeight = content.height - 260
+        let cellHeight = gridHeight / CGFloat(rowCount)
 
         for (index, cell) in cells.enumerated() {
             let row = index / 7
@@ -261,13 +262,13 @@ struct PetCalendarRenderer {
             context: context,
             colors: [
                 UIColor.white.withAlphaComponent(cell.isInDisplayedMonth ? 0.16 : 0.05),
-                UIColor(hex: "#D8F5FF").withAlphaComponent(cell.isInDisplayedMonth ? 0.20 : 0.05),
-                UIColor(hex: "#62C8F2").withAlphaComponent(cell.isInDisplayedMonth ? 0.10 : 0.03)
+                UIColor(hex: "#F2FAFD").withAlphaComponent(cell.isInDisplayedMonth ? 0.14 : 0.04),
+                UIColor(hex: "#DCECF2").withAlphaComponent(cell.isInDisplayedMonth ? 0.08 : 0.03)
             ]
         )
         context.restoreGState()
         let baseStroke = entry == nil
-            ? UIColor(hex: "#9DDEFF").withAlphaComponent(cell.isInDisplayedMonth ? 0.56 : 0.18)
+            ? UIColor(hex: "#D4E6EE").withAlphaComponent(cell.isInDisplayedMonth ? 0.50 : 0.18)
             : UIColor(hex: "#93C8ED").withAlphaComponent(0.96)
         baseStroke.setStroke()
         path.lineWidth = entry == nil ? 2 : 3

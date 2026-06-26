@@ -103,6 +103,81 @@ final class BillingLogicTests: XCTestCase {
         XCTAssertFalse(state.isSevenDayPassActive(on: now))
     }
 
+    func testEntitlementFreshnessRequiresRefreshWhenMissingOldOrFresh() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let oldCheck = now.addingTimeInterval(-(EntitlementFreshnessPolicy.maxTrustedAge + 1))
+        let freshCheck = now.addingTimeInterval(-60)
+
+        XCTAssertTrue(EntitlementState.free.needsTransactionCheck(now: now))
+        XCTAssertTrue(EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: oldCheck
+        ).needsTransactionCheck(now: now))
+        XCTAssertFalse(EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: freshCheck
+        ).needsTransactionCheck(now: now))
+    }
+
+    func testStoredLocalEntitlementIsNotTrustedUntilFreshlyChecked() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let staleSevenDayPass = EntitlementState(
+            sevenDayPassExpiresAt: now.addingTimeInterval(3_600),
+            hasLifetimePass: false,
+            lastTransactionCheckAt: nil
+        )
+        let staleLifetimePass = EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: now.addingTimeInterval(-(EntitlementFreshnessPolicy.maxTrustedAge + 1))
+        )
+
+        XCTAssertTrue(staleSevenDayPass.grantsUnlimitedWatermarkFreeOutput(on: now))
+        XCTAssertFalse(staleSevenDayPass.grantsFreshUnlimitedWatermarkFreeOutput(on: now))
+        XCTAssertFalse(WatermarkAccessPolicy(entitlementState: staleSevenDayPass, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess)
+        XCTAssertFalse(WatermarkAccessPolicy(entitlementState: staleLifetimePass, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess)
+    }
+
+    func testFreshSevenDayAndLifetimePassesAreTrustedForWatermarkFreeOutput() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let freshCheck = now.addingTimeInterval(-60)
+        let sevenDayPass = EntitlementState(
+            sevenDayPassExpiresAt: now.addingTimeInterval(3_600),
+            hasLifetimePass: false,
+            lastTransactionCheckAt: freshCheck
+        )
+        let lifetimePass = EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: freshCheck
+        )
+
+        XCTAssertTrue(WatermarkAccessPolicy(entitlementState: sevenDayPass, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess)
+        XCTAssertTrue(WatermarkAccessPolicy(entitlementState: lifetimePass, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess)
+    }
+
+    func testRevalidationClearsStoredLocalEntitlementWhenNoTransactionsRemain() {
+        let appState = MemoriesAppState(defaults: makeDefaults())
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        XCTAssertTrue(appState.applyPurchasedProduct(
+            id: PurchaseProductID.lifetimePass.rawValue,
+            purchaseDate: now,
+            checkedAt: now
+        ))
+        XCTAssertTrue(appState.watermarkPolicy(now: now).snapshot.hasUnlimitedAccess)
+
+        appState.replaceEntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: false,
+            checkedAt: now.addingTimeInterval(30)
+        )
+
+        XCTAssertFalse(appState.watermarkPolicy(now: now.addingTimeInterval(30)).snapshot.hasUnlimitedAccess)
+    }
+
     func testReplacingEntitlementsClearsStaleLocalPasses() throws {
         let appState = MemoriesAppState(defaults: makeDefaults())
         let purchaseDate = Date(timeIntervalSince1970: 1_800_000_000)
@@ -195,7 +270,7 @@ final class BillingLogicTests: XCTestCase {
         let state = EntitlementState(
             sevenDayPassExpiresAt: PurchaseEntitlementRules.sevenDayPassExpiry(from: now),
             hasLifetimePass: false,
-            lastTransactionCheckAt: nil
+            lastTransactionCheckAt: now
         )
         let policy = WatermarkAccessPolicy(
             entitlementState: state,

@@ -17,5 +17,9 @@ final class DeepLinkTests: XCTestCase {
     func testInvalidDeepLinksReturnNilWithoutCrashing() throws {
         XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "memories://settings"))))
         XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "https://example.com/calendar"))))
+        XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "memories://calendar/delete?id=2026-06-25"))))
+        XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "memories://calendar/export"))))
+        XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "memories://purchase/lifetime"))))
+        XCTAssertNil(MemoriesDeepLinkRouter.route(for: try XCTUnwrap(URL(string: "memories://calendar/today/edit"))))
     }
 }

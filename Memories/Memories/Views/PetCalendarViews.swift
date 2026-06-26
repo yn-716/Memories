@@ -10,6 +10,7 @@ struct PetCalendarHomeView: View {
     var openTodayEditorOnAppear = false
 
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
     @State private var selectedMonth = PetCalendarDateRules.monthStart(for: Date())
     @State private var entries: [PetCalendarDayEntry] = []
     @State private var selectedDay: PetCalendarIdentifiedDate?
@@ -169,12 +170,20 @@ struct PetCalendarHomeView: View {
     }
 
     private func reloadEntries() {
+        Task {
+            await reloadEntriesAndWidgetSnapshot()
+        }
+    }
+
+    @MainActor
+    private func reloadEntriesAndWidgetSnapshot() async {
         guard let repository else {
             repositoryError = PetCalendarRepositoryError.appGroupContainerUnavailable.localizedDescription
             return
         }
         repositoryError = nil
         entries = repository.loadEntries()
+        await storeKitManager.ensureFreshEntitlements()
         try? repository.writeWidgetSnapshot(
             entries: entries,
             selectedMonth: selectedMonth,
@@ -766,6 +775,7 @@ struct PetCalendarDayEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedImage: UIImage?
     @State private var selectedNewImage: UIImage?
@@ -834,7 +844,9 @@ struct PetCalendarDayEditorView: View {
         }
         .alert(appState.t("calendar.replaceTitle"), isPresented: $showReplaceConfirmation) {
             Button(appState.t("calendar.replace"), role: .destructive) {
-                saveEntry(allowReplace: true)
+                Task {
+                    await saveEntry(allowReplace: true)
+                }
             }
             Button(appState.t("common.cancel"), role: .cancel) {}
         } message: {
@@ -1141,10 +1153,13 @@ struct PetCalendarDayEditorView: View {
             showReplaceConfirmation = true
             return
         }
-        saveEntry(allowReplace: existingEntry != nil)
+        Task {
+            await saveEntry(allowReplace: existingEntry != nil)
+        }
     }
 
-    private func saveEntry(allowReplace: Bool) {
+    @MainActor
+    private func saveEntry(allowReplace: Bool) async {
         guard let repository else {
             alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: PetCalendarRepositoryError.appGroupContainerUnavailable.localizedDescription)
             return
@@ -1153,6 +1168,7 @@ struct PetCalendarDayEditorView: View {
         defer { isProcessing = false }
 
         do {
+            await storeKitManager.ensureFreshEntitlements()
             let image = selectedNewImage ?? selectedImage
             _ = try repository.save(
                 image: image,
@@ -1174,10 +1190,18 @@ struct PetCalendarDayEditorView: View {
     }
 
     private func deleteEntry() {
+        Task {
+            await deleteEntryAfterRefreshingEntitlements()
+        }
+    }
+
+    @MainActor
+    private func deleteEntryAfterRefreshingEntitlements() async {
         guard let repository else {
             return
         }
         do {
+            await storeKitManager.ensureFreshEntitlements()
             try repository.deleteEntry(
                 for: registrationDate,
                 widgetSelectedMonth: registrationDate,
@@ -1197,6 +1221,7 @@ struct PetCalendarPreviewView: View {
     let month: Date
 
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
     @State private var renderedImage: UIImage?
     @State private var watermarkOption: WatermarkExportOption = .withWatermark
     @State private var hasAppliedInitialOption = false
@@ -1224,7 +1249,8 @@ struct PetCalendarPreviewView: View {
         }
         .navigationTitle(appState.t("calendar.outputTitle"))
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
+        .task {
+            await refreshEntitlementsForWatermarkDecisionIfNeeded()
             applyInitialWatermarkOptionIfNeeded()
             renderCalendar()
         }
@@ -1240,7 +1266,9 @@ struct PetCalendarPreviewView: View {
         }
         .alert(appState.t("preview.confirmShareTitle"), isPresented: $showWatermarklessShareConfirmation) {
             Button(appState.t("preview.shareAction")) {
-                openShareSheet(consumesFreeWatermarkAllowance: true)
+                Task {
+                    await openShareSheet(consumesFreeWatermarkAllowance: true)
+                }
             }
             Button(appState.t("common.cancel"), role: .cancel) {}
         } message: {
@@ -1285,7 +1313,9 @@ struct PetCalendarPreviewView: View {
                     .disabled(renderedImage == nil || isProcessing)
 
                     MemoriesSecondaryButton(appState.t("calendar.shareCalendar"), systemImage: "square.and.arrow.up") {
-                        prepareShare()
+                        Task {
+                            await prepareShare()
+                        }
                     }
                     .disabled(renderedImage == nil || isProcessing)
                 }
@@ -1349,7 +1379,7 @@ struct PetCalendarPreviewView: View {
 
     @MainActor
     private func saveToPhotoLibrary() async {
-        guard ensureCanExportSelectedWatermark(), let image = preparedImage() else {
+        guard await ensureCanExportSelectedWatermark(), let image = preparedImage() else {
             return
         }
         isProcessing = true
@@ -1367,18 +1397,26 @@ struct PetCalendarPreviewView: View {
         }
     }
 
-    private func prepareShare() {
-        guard ensureCanExportSelectedWatermark() else {
+    @MainActor
+    private func prepareShare() async {
+        guard await ensureCanExportSelectedWatermark() else {
             return
         }
         if CalendarWatermarkExportRules.shouldConsumeAllowance(afterSuccessfulOutput: watermarkOption, snapshot: watermarkAccessSnapshot) {
             showWatermarklessShareConfirmation = true
             return
         }
-        openShareSheet(consumesFreeWatermarkAllowance: false)
+        await openShareSheet(consumesFreeWatermarkAllowance: false)
     }
 
-    private func openShareSheet(consumesFreeWatermarkAllowance: Bool) {
+    @MainActor
+    private func openShareSheet(consumesFreeWatermarkAllowance: Bool) async {
+        if consumesFreeWatermarkAllowance {
+            guard await ensureCanExportSelectedWatermark() else {
+                return
+            }
+        }
+
         guard let image = preparedImage() else {
             alert = PetCalendarAlert(title: appState.t("calendar.outputShareFailed"), message: appState.t("preview.imageGenerateFailed"))
             return
@@ -1433,13 +1471,26 @@ struct PetCalendarPreviewView: View {
         }
     }
 
-    private func ensureCanExportSelectedWatermark() -> Bool {
+    @MainActor
+    private func ensureCanExportSelectedWatermark() async -> Bool {
+        if watermarkOption == .withoutWatermark {
+            await refreshEntitlementsForWatermarkDecisionIfNeeded()
+        }
+
         guard CalendarWatermarkExportRules.canSelect(watermarkOption, snapshot: watermarkAccessSnapshot) else {
             alert = PetCalendarAlert(title: appState.t("preview.freeUsedTitle"), message: appState.t("preview.freeUsedMessage"))
             watermarkOption = .withWatermark
             return false
         }
         return true
+    }
+
+    @MainActor
+    private func refreshEntitlementsForWatermarkDecisionIfNeeded() async {
+        await storeKitManager.ensureFreshEntitlements()
+        if !watermarkAccessSnapshot.canExportWithoutWatermark, watermarkOption == .withoutWatermark {
+            watermarkOption = .withWatermark
+        }
     }
 
     private func consumeAllowanceIfNeeded() -> Bool {

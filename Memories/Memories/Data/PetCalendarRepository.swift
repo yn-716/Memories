@@ -7,6 +7,7 @@ enum PetCalendarRepositoryError: LocalizedError, Equatable {
     case imageWriteFailed
     case futureDateNotAllowed
     case replacementRequiresConfirmation
+    case appSupportDirectoryUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -20,17 +21,27 @@ enum PetCalendarRepositoryError: LocalizedError, Equatable {
             return "未来の日付には登録できません。"
         case .replacementRequiresConfirmation:
             return "既存の写真を置き換えるには確認が必要です。"
+        case .appSupportDirectoryUnavailable:
+            return "カレンダー保存先を準備できませんでした。"
         }
     }
 }
 
 struct PetCalendarRepository {
-    private let rootURL: URL
+    static let appDataFileProtection: FileProtectionType = .complete
+    static let widgetDataFileProtection: FileProtectionType = .completeUntilFirstUserAuthentication
+
+    private let appRootURL: URL
+    private let widgetRootURL: URL
+    private let legacyAppGroupRootURL: URL?
     private let fileManager: FileManager
     private let calendar: Calendar
 
     init(
         rootURL: URL? = nil,
+        appRootURL: URL? = nil,
+        widgetRootURL: URL? = nil,
+        legacyAppGroupRootURL: URL? = nil,
         fileManager: FileManager = .default,
         calendar: Calendar = PetCalendarDateRules.gregorianCalendar()
     ) throws {
@@ -38,14 +49,37 @@ struct PetCalendarRepository {
         self.calendar = calendar
 
         if let rootURL {
-            self.rootURL = rootURL
-        } else if let appGroupURL = fileManager.containerURL(
-            forSecurityApplicationGroupIdentifier: PetCalendarConstants.appGroupIdentifier
-        ) {
-            self.rootURL = appGroupURL
+            self.appRootURL = rootURL
+            self.widgetRootURL = rootURL
         } else {
-            throw PetCalendarRepositoryError.appGroupContainerUnavailable
+            if let appRootURL {
+                self.appRootURL = appRootURL
+            } else if let defaultAppRootURL = Self.defaultAppRootURL(fileManager: fileManager) {
+                self.appRootURL = defaultAppRootURL
+            } else {
+                throw PetCalendarRepositoryError.appSupportDirectoryUnavailable
+            }
+
+            if let widgetRootURL {
+                self.widgetRootURL = widgetRootURL
+            } else if let appGroupURL = fileManager.containerURL(
+                forSecurityApplicationGroupIdentifier: PetCalendarConstants.appGroupIdentifier
+            ) {
+                self.widgetRootURL = appGroupURL
+            } else {
+                throw PetCalendarRepositoryError.appGroupContainerUnavailable
+            }
         }
+
+        if let legacyAppGroupRootURL {
+            self.legacyAppGroupRootURL = legacyAppGroupRootURL
+        } else {
+            self.legacyAppGroupRootURL = fileManager.containerURL(
+                forSecurityApplicationGroupIdentifier: PetCalendarConstants.appGroupIdentifier
+            )
+        }
+
+        migrateLegacyAppGroupDataIfNeeded()
     }
 
     func loadEntries() -> [PetCalendarDayEntry] {
@@ -196,16 +230,18 @@ struct PetCalendarRepository {
     }
 
     func storageSize() -> Int64 {
-        guard let enumerator = fileManager.enumerator(at: calendarDirectory, includingPropertiesForKeys: [.fileSizeKey]) else {
-            return 0
-        }
-
-        return enumerator.compactMap { item in
-            guard let url = item as? URL else {
-                return nil
+        [calendarDirectory, widgetDirectory].reduce(Int64(0)) { total, directory in
+            guard let enumerator = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.fileSizeKey]) else {
+                return total
             }
-            return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
-        }.reduce(0, +)
+
+            return total + enumerator.compactMap { item in
+                guard let url = item as? URL else {
+                    return nil
+                }
+                return (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+            }.reduce(0, +)
+        }
     }
 
     func writeWidgetSnapshot(
@@ -220,26 +256,12 @@ struct PetCalendarRepository {
             updatedAt: Date(),
             selectedMonth: PetCalendarDateRules.monthStart(for: selectedMonth, calendar: calendar),
             displayLanguage: displayLanguage,
-            showsBranding: showsBranding,
-            entries: currentEntries.map { entry in
-                PetCalendarWidgetEntry(
-                    id: entry.id,
-                    date: entry.date,
-                    imageFileName: entry.imageFileName,
-                    thumbnailFileName: entry.thumbnailFileName,
-                    caption: entry.caption,
-                    photoPlacement: entry.photoPlacement,
-                    overlayStyle: entry.overlayStyle
-                )
-            }
+            showsBranding: showsBranding
         )
         let renderedImageSets = try writeWidgetRenderedImageSets(snapshot: snapshot, entries: currentEntries)
-        guard let renderedImageNames = renderedImageSets.first?.imageNames else {
+        guard !renderedImageSets.isEmpty else {
             throw PetCalendarRepositoryError.imageWriteFailed
         }
-        snapshot.smallImageFileName = renderedImageNames.small
-        snapshot.mediumImageFileName = renderedImageNames.medium
-        snapshot.largeImageFileName = renderedImageNames.large
         snapshot.renderedImageSets = renderedImageSets
 
         let encoder = JSONEncoder()
@@ -247,12 +269,16 @@ struct PetCalendarRepository {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(snapshot)
         try data.write(to: widgetSnapshotURL, options: widgetReadableWriteOptions)
-        protectItemIfPossible(at: widgetSnapshotURL)
+        protectItemIfPossible(at: widgetSnapshotURL, attributes: widgetReadableFileAttributes)
         removeObsoleteWidgetRenderedImages(keeping: Set(renderedImageSets.flatMap(\.fileNames)))
     }
 
     var widgetDirectoryURL: URL {
         widgetDirectory
+    }
+
+    var appCalendarDirectoryURL: URL {
+        calendarDirectory
     }
 
     private func writeIndex(_ entries: [PetCalendarDayEntry]) throws {
@@ -261,8 +287,8 @@ struct PetCalendarRepository {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(entries)
-        try data.write(to: indexURL, options: widgetReadableWriteOptions)
-        protectItemIfPossible(at: indexURL)
+        try data.write(to: indexURL, options: appProtectedWriteOptions)
+        protectItemIfPossible(at: indexURL, attributes: appProtectedFileAttributes)
     }
 
     private func writeWidgetRenderedImageSets(
@@ -296,7 +322,7 @@ struct PetCalendarRepository {
                 let fileName = renderedImage.family.fileName(versionID: versionID)
                 let url = widgetDirectory.appendingPathComponent(fileName)
                 try data.write(to: url, options: widgetReadableWriteOptions)
-                protectItemIfPossible(at: url)
+                protectItemIfPossible(at: url, attributes: widgetReadableFileAttributes)
                 renderedFileNames[renderedImage.family] = fileName
             }
 
@@ -347,46 +373,117 @@ struct PetCalendarRepository {
             throw PetCalendarRepositoryError.imageWriteFailed
         }
 
-        try data.write(to: url, options: widgetReadableWriteOptions)
-        protectItemIfPossible(at: url)
+        try data.write(to: url, options: appProtectedWriteOptions)
+        protectItemIfPossible(at: url, attributes: appProtectedFileAttributes)
     }
 
     private func ensureDirectories() throws {
-        try createProtectedDirectory(at: calendarDirectory)
-        try createProtectedDirectory(at: imagesDirectory)
-        try createProtectedDirectory(at: thumbnailsDirectory)
-        try createProtectedDirectory(at: widgetDirectory)
-        protectExistingItemsIfPossible(in: calendarDirectory)
-        protectExistingItemsIfPossible(in: imagesDirectory)
-        protectExistingItemsIfPossible(in: thumbnailsDirectory)
-        protectExistingItemsIfPossible(in: widgetDirectory)
+        try createProtectedDirectory(at: calendarDirectory, attributes: appProtectedFileAttributes)
+        try createProtectedDirectory(at: imagesDirectory, attributes: appProtectedFileAttributes)
+        try createProtectedDirectory(at: thumbnailsDirectory, attributes: appProtectedFileAttributes)
+        try createProtectedDirectory(at: widgetDirectory, attributes: widgetReadableFileAttributes)
+        protectExistingItemsIfPossible(in: calendarDirectory, attributes: appProtectedFileAttributes)
+        protectExistingItemsIfPossible(in: imagesDirectory, attributes: appProtectedFileAttributes)
+        protectExistingItemsIfPossible(in: thumbnailsDirectory, attributes: appProtectedFileAttributes)
+        protectExistingItemsIfPossible(in: widgetDirectory, attributes: widgetReadableFileAttributes)
     }
 
-    private func createProtectedDirectory(at url: URL) throws {
+    private func createProtectedDirectory(at url: URL, attributes: [FileAttributeKey: Any]) throws {
         try fileManager.createDirectory(
             at: url,
             withIntermediateDirectories: true,
-            attributes: protectedFileAttributes
+            attributes: attributes
         )
-        protectItemIfPossible(at: url)
+        protectItemIfPossible(at: url, attributes: attributes)
     }
 
-    private func protectExistingItemsIfPossible(in directory: URL) {
+    private func protectExistingItemsIfPossible(in directory: URL, attributes: [FileAttributeKey: Any]) {
         guard let urls = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
             return
         }
-        urls.forEach { protectItemIfPossible(at: $0) }
+        urls.forEach { protectItemIfPossible(at: $0, attributes: attributes) }
     }
 
-    private func protectItemIfPossible(at url: URL) {
+    private func protectItemIfPossible(at url: URL, attributes: [FileAttributeKey: Any]) {
         guard fileManager.fileExists(atPath: url.path) else {
             return
         }
-        try? fileManager.setAttributes(protectedFileAttributes, ofItemAtPath: url.path)
+        try? fileManager.setAttributes(attributes, ofItemAtPath: url.path)
+    }
+
+    private func migrateLegacyAppGroupDataIfNeeded() {
+        guard
+            !fileManager.fileExists(atPath: indexURL.path),
+            let legacyAppGroupRootURL,
+            legacyAppGroupRootURL.standardizedFileURL != appRootURL.standardizedFileURL
+        else {
+            return
+        }
+
+        let legacyCalendarDirectory = legacyAppGroupRootURL.appendingPathComponent("PetCalendar", isDirectory: true)
+        let legacyIndexURL = legacyCalendarDirectory.appendingPathComponent("index.json")
+        guard fileManager.fileExists(atPath: legacyIndexURL.path) else {
+            return
+        }
+
+        do {
+            try createProtectedDirectory(at: calendarDirectory, attributes: appProtectedFileAttributes)
+            try copyLegacyItemIfNeeded(
+                from: legacyIndexURL,
+                to: indexURL,
+                attributes: appProtectedFileAttributes
+            )
+            try copyLegacyItemIfNeeded(
+                from: legacyCalendarDirectory.appendingPathComponent("Images", isDirectory: true),
+                to: imagesDirectory,
+                attributes: appProtectedFileAttributes
+            )
+            try copyLegacyItemIfNeeded(
+                from: legacyCalendarDirectory.appendingPathComponent("Thumbnails", isDirectory: true),
+                to: thumbnailsDirectory,
+                attributes: appProtectedFileAttributes
+            )
+            protectExistingItemsIfPossible(in: calendarDirectory, attributes: appProtectedFileAttributes)
+            protectExistingItemsIfPossible(in: imagesDirectory, attributes: appProtectedFileAttributes)
+            protectExistingItemsIfPossible(in: thumbnailsDirectory, attributes: appProtectedFileAttributes)
+            try writeWidgetSnapshot(entries: loadEntries())
+            try? fileManager.removeItem(at: legacyIndexURL)
+            try? fileManager.removeItem(at: legacyCalendarDirectory.appendingPathComponent("Images", isDirectory: true))
+            try? fileManager.removeItem(at: legacyCalendarDirectory.appendingPathComponent("Thumbnails", isDirectory: true))
+        } catch {
+            return
+        }
+    }
+
+    private func copyLegacyItemIfNeeded(
+        from sourceURL: URL,
+        to destinationURL: URL,
+        attributes: [FileAttributeKey: Any]
+    ) throws {
+        guard fileManager.fileExists(atPath: sourceURL.path) else {
+            return
+        }
+
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            return
+        }
+
+        try fileManager.createDirectory(
+            at: destinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: attributes
+        )
+        try fileManager.copyItem(at: sourceURL, to: destinationURL)
+        protectItemIfPossible(at: destinationURL, attributes: attributes)
+    }
+
+    private static func defaultAppRootURL(fileManager: FileManager) -> URL? {
+        fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Memories", isDirectory: true)
     }
 
     private var calendarDirectory: URL {
-        rootURL.appendingPathComponent("PetCalendar", isDirectory: true)
+        appRootURL.appendingPathComponent("PetCalendar", isDirectory: true)
     }
 
     private var imagesDirectory: URL {
@@ -398,7 +495,7 @@ struct PetCalendarRepository {
     }
 
     private var widgetDirectory: URL {
-        calendarDirectory.appendingPathComponent("Widget", isDirectory: true)
+        widgetRootURL.appendingPathComponent("PetCalendarWidget", isDirectory: true)
     }
 
     private var indexURL: URL {
@@ -413,44 +510,40 @@ struct PetCalendarRepository {
         [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
     }
 
-    private var protectedFileAttributes: [FileAttributeKey: Any] {
-        [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+    private var appProtectedWriteOptions: Data.WritingOptions {
+        [.atomic, .completeFileProtection]
+    }
+
+    private var appProtectedFileAttributes: [FileAttributeKey: Any] {
+        [.protectionKey: Self.appDataFileProtection]
+    }
+
+    private var widgetReadableFileAttributes: [FileAttributeKey: Any] {
+        [.protectionKey: Self.widgetDataFileProtection]
     }
 }
 
 struct PetCalendarWidgetSnapshot: Codable, Hashable {
-    static let fileName = "pet-calendar-widget-snapshot.json"
+    static let fileName = "widget-snapshot.json"
 
     var updatedAt: Date
     var selectedMonth: Date
     var displayLanguage: PetCalendarDisplayLanguage
     var showsBranding: Bool
-    var smallImageFileName: String?
-    var mediumImageFileName: String?
-    var largeImageFileName: String?
     var renderedImageSets: [PetCalendarWidgetRenderedImageSet]
-    var entries: [PetCalendarWidgetEntry]
 
     init(
         updatedAt: Date,
         selectedMonth: Date,
         displayLanguage: PetCalendarDisplayLanguage = .japanese,
         showsBranding: Bool = true,
-        smallImageFileName: String? = nil,
-        mediumImageFileName: String? = nil,
-        largeImageFileName: String? = nil,
-        renderedImageSets: [PetCalendarWidgetRenderedImageSet] = [],
-        entries: [PetCalendarWidgetEntry]
+        renderedImageSets: [PetCalendarWidgetRenderedImageSet] = []
     ) {
         self.updatedAt = updatedAt
         self.selectedMonth = selectedMonth
         self.displayLanguage = displayLanguage
         self.showsBranding = showsBranding
-        self.smallImageFileName = smallImageFileName
-        self.mediumImageFileName = mediumImageFileName
-        self.largeImageFileName = largeImageFileName
         self.renderedImageSets = renderedImageSets
-        self.entries = entries
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -458,11 +551,7 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
         case selectedMonth
         case displayLanguage
         case showsBranding
-        case smallImageFileName
-        case mediumImageFileName
-        case largeImageFileName
         case renderedImageSets
-        case entries
     }
 
     init(from decoder: Decoder) throws {
@@ -471,11 +560,7 @@ struct PetCalendarWidgetSnapshot: Codable, Hashable {
         selectedMonth = try container.decode(Date.self, forKey: .selectedMonth)
         displayLanguage = try container.decodeIfPresent(PetCalendarDisplayLanguage.self, forKey: .displayLanguage) ?? .japanese
         showsBranding = try container.decodeIfPresent(Bool.self, forKey: .showsBranding) ?? true
-        smallImageFileName = try container.decodeIfPresent(String.self, forKey: .smallImageFileName)
-        mediumImageFileName = try container.decodeIfPresent(String.self, forKey: .mediumImageFileName)
-        largeImageFileName = try container.decodeIfPresent(String.self, forKey: .largeImageFileName)
         renderedImageSets = try container.decodeIfPresent([PetCalendarWidgetRenderedImageSet].self, forKey: .renderedImageSets) ?? []
-        entries = try container.decode([PetCalendarWidgetEntry].self, forKey: .entries)
     }
 }
 
@@ -491,55 +576,6 @@ struct PetCalendarWidgetRenderedImageSet: Codable, Hashable {
 
     var fileNames: [String] {
         [imageNames.small, imageNames.medium, imageNames.large]
-    }
-}
-
-struct PetCalendarWidgetEntry: Codable, Identifiable, Hashable {
-    var id: String
-    var date: Date
-    var imageFileName: String?
-    var thumbnailFileName: String?
-    var caption: String
-    var photoPlacement: PhotoPlacement
-    var overlayStyle: PetCalendarOverlayStyle
-
-    init(
-        id: String,
-        date: Date,
-        imageFileName: String? = nil,
-        thumbnailFileName: String?,
-        caption: String = "",
-        photoPlacement: PhotoPlacement = .default,
-        overlayStyle: PetCalendarOverlayStyle = .default
-    ) {
-        self.id = id
-        self.date = date
-        self.imageFileName = imageFileName
-        self.thumbnailFileName = thumbnailFileName
-        self.caption = caption
-        self.photoPlacement = photoPlacement.clamped
-        self.overlayStyle = overlayStyle
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case date
-        case imageFileName
-        case thumbnailFileName
-        case caption
-        case photoPlacement
-        case overlayStyle
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        date = try container.decode(Date.self, forKey: .date)
-        imageFileName = try container.decodeIfPresent(String.self, forKey: .imageFileName)
-        thumbnailFileName = try container.decodeIfPresent(String.self, forKey: .thumbnailFileName)
-        caption = try container.decodeIfPresent(String.self, forKey: .caption) ?? ""
-        photoPlacement = (try container.decodeIfPresent(PhotoPlacement.self, forKey: .photoPlacement) ?? .default).clamped
-        overlayStyle = try container.decodeIfPresent(PetCalendarOverlayStyle.self, forKey: .overlayStyle) ?? .default
     }
 }
 

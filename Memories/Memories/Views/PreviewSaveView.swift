@@ -12,6 +12,7 @@ struct PreviewSaveView: View {
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: MemoriesAppState
+    @EnvironmentObject private var storeKitManager: StoreKitManager
     @State private var renderedImage: UIImage?
     @State private var isProcessing = false
     @State private var outputAlert: PreviewOutputAlert?
@@ -73,6 +74,7 @@ struct PreviewSaveView: View {
         .navigationTitle(appState.t("preview.title"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            await refreshEntitlementsForWatermarkDecisionIfNeeded()
             applyInitialWatermarkOptionIfNeeded()
             renderIfNeeded()
         }
@@ -92,7 +94,9 @@ struct PreviewSaveView: View {
         }
         .alert(appState.t("preview.confirmShareTitle"), isPresented: $showWatermarklessShareConfirmation) {
             Button(appState.t("preview.shareAction")) {
-                openShareSheet(consumesFreeWatermarkAllowance: true)
+                Task {
+                    await openShareSheet(consumesFreeWatermarkAllowance: true)
+                }
             }
 
             Button(appState.t("common.cancel"), role: .cancel) {}
@@ -204,9 +208,11 @@ struct PreviewSaveView: View {
                     }
                     .disabled(renderedImage == nil || isProcessing)
 
-                    MemoriesSecondaryButton(appState.t("preview.share"), systemImage: "square.and.arrow.up") {
-                        prepareShare()
-                    }
+            MemoriesSecondaryButton(appState.t("preview.share"), systemImage: "square.and.arrow.up") {
+                Task {
+                    await prepareShare()
+                }
+            }
                     .disabled(renderedImage == nil || isProcessing)
                 }
 
@@ -353,7 +359,7 @@ struct PreviewSaveView: View {
 
     @MainActor
     private func saveToPhotoLibrary() async {
-        guard ensureCanExportSelectedWatermark() else {
+        guard await ensureCanExportSelectedWatermark() else {
             return
         }
 
@@ -382,8 +388,9 @@ struct PreviewSaveView: View {
         }
     }
 
-    private func prepareShare() {
-        guard ensureCanExportSelectedWatermark() else {
+    @MainActor
+    private func prepareShare() async {
+        guard await ensureCanExportSelectedWatermark() else {
             return
         }
 
@@ -392,10 +399,17 @@ struct PreviewSaveView: View {
             return
         }
 
-        openShareSheet(consumesFreeWatermarkAllowance: false)
+        await openShareSheet(consumesFreeWatermarkAllowance: false)
     }
 
-    private func openShareSheet(consumesFreeWatermarkAllowance: Bool) {
+    @MainActor
+    private func openShareSheet(consumesFreeWatermarkAllowance: Bool) async {
+        if consumesFreeWatermarkAllowance {
+            guard await ensureCanExportSelectedWatermark() else {
+                return
+            }
+        }
+
         guard let image = preparedImage() else {
             outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: appState.t("preview.imageGenerateFailed"))
             return
@@ -554,7 +568,12 @@ struct PreviewSaveView: View {
         hasAppliedInitialWatermarkOption = true
     }
 
-    private func ensureCanExportSelectedWatermark() -> Bool {
+    @MainActor
+    private func ensureCanExportSelectedWatermark() async -> Bool {
+        if watermarkOption == .withoutWatermark {
+            await refreshEntitlementsForWatermarkDecisionIfNeeded()
+        }
+
         guard watermarkAccessPolicy.canExport(option: watermarkOption) else {
             outputAlert = PreviewOutputAlert(title: appState.t("preview.freeUsedTitle"), message: appState.t("preview.freeUsedMessage"))
             watermarkOption = .withWatermark
@@ -562,6 +581,14 @@ struct PreviewSaveView: View {
         }
 
         return true
+    }
+
+    @MainActor
+    private func refreshEntitlementsForWatermarkDecisionIfNeeded() async {
+        await storeKitManager.ensureFreshEntitlements()
+        if !watermarkAccessSnapshot.canExportWithoutWatermark, watermarkOption == .withoutWatermark {
+            watermarkOption = .withWatermark
+        }
     }
 
     private func consumeWatermarkAllowanceIfNeeded() -> Bool {

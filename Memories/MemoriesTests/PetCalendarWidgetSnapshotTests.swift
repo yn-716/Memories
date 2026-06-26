@@ -14,15 +14,12 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
         super.tearDown()
     }
 
-    func testWidgetSnapshotCanUseInjectedDirectoryAndReferencesThumbnails() throws {
-        let rootURL = makeTemporaryDirectory()
-        let repository = try PetCalendarRepository(rootURL: rootURL, calendar: testCalendar)
+    func testWidgetSnapshotCanUseInjectedWidgetDirectoryAndOnlyReferencesRenderedImages() throws {
+        let repository = try makeRepository()
         let now = date(year: 2026, month: 6, day: 25)
-        let placement = PhotoPlacement(scale: 2, offsetX: 0.2, offsetY: -0.3)
-        let entry = try repository.save(
+        _ = try repository.save(
             image: makeImage(),
-            caption: "hi",
-            photoPlacement: placement,
+            photoPlacement: PhotoPlacement(scale: 2, offsetX: 0.2, offsetY: -0.3),
             for: now,
             now: now
         )
@@ -36,64 +33,30 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
 
         let snapshotURL = repository.widgetDirectoryURL.appendingPathComponent(PetCalendarWidgetSnapshot.fileName)
         let data = try Data(contentsOf: snapshotURL)
+        let json = String(decoding: data, as: UTF8.self)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: data)
 
-        XCTAssertEqual(snapshot.entries.first?.id, "2026-06-25")
-        XCTAssertEqual(snapshot.entries.first?.imageFileName, entry.imageFileName)
-        XCTAssertEqual(snapshot.entries.first?.thumbnailFileName, entry.thumbnailFileName)
-        XCTAssertEqual(snapshot.entries.first?.caption, "")
-        XCTAssertEqual(snapshot.entries.first?.photoPlacement, placement)
-        XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
         XCTAssertEqual(snapshot.displayLanguage, .english)
         XCTAssertFalse(snapshot.showsBranding)
         XCTAssertEqual(snapshot.renderedImageSets.count, 2)
-        let renderedFileNames = [
-            try XCTUnwrap(snapshot.smallImageFileName),
-            try XCTUnwrap(snapshot.mediumImageFileName),
-            try XCTUnwrap(snapshot.largeImageFileName)
-        ]
-        let allRenderedFileNames = snapshot.renderedImageSets.flatMap(\.fileNames)
-        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[0]))
-        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[1]))
-        XCTAssertTrue(allRenderedFileNames.contains(renderedFileNames[2]))
-        for fileName in allRenderedFileNames {
+        XCTAssertFalse(json.contains("imageFileName"))
+        XCTAssertFalse(json.contains("thumbnailFileName"))
+        XCTAssertFalse(json.contains("caption"))
+        XCTAssertFalse(json.contains("photoPlacement"))
+        XCTAssertFalse(json.contains("overlayStyle"))
+
+        for fileName in snapshot.renderedImageSets.flatMap(\.fileNames) {
             let url = repository.widgetDirectoryURL.appendingPathComponent(fileName)
             XCTAssertTrue(fileName.hasPrefix("pet-calendar-widget-"))
             XCTAssertTrue(fileName.hasSuffix(".jpg"))
             XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
             XCTAssertGreaterThan((try? Data(contentsOf: url).count) ?? 0, 1_000)
         }
-
-        try repository.writeWidgetSnapshot(
-            entries: repository.loadEntries(),
-            selectedMonth: now,
-            displayLanguage: .english,
-            showsBranding: false
-        )
-        let updatedData = try Data(contentsOf: snapshotURL)
-        let updatedSnapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: updatedData)
-        let updatedRenderedFileNames = [
-            try XCTUnwrap(updatedSnapshot.smallImageFileName),
-            try XCTUnwrap(updatedSnapshot.mediumImageFileName),
-            try XCTUnwrap(updatedSnapshot.largeImageFileName)
-        ]
-        let updatedAllRenderedFileNames = updatedSnapshot.renderedImageSets.flatMap(\.fileNames)
-
-        XCTAssertNotEqual(renderedFileNames, updatedRenderedFileNames)
-        for fileName in allRenderedFileNames {
-            XCTAssertFalse(FileManager.default.fileExists(atPath: repository.widgetDirectoryURL.appendingPathComponent(fileName).path))
-        }
-        for fileName in updatedAllRenderedFileNames {
-            XCTAssertTrue(FileManager.default.fileExists(atPath: repository.widgetDirectoryURL.appendingPathComponent(fileName).path))
-        }
-        XCTAssertNotEqual(snapshot.entries.first?.thumbnailFileName, entry.imageFileName)
-        let thumbnailURL = try XCTUnwrap(repository.thumbnailURL(for: entry))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
     }
 
-    func testWidgetSnapshotDecodesLegacyJSONWithoutLanguageBrandingOrOverlayStyle() throws {
+    func testWidgetSnapshotDecodesLegacyJSONByIgnoringEntryPayload() throws {
         let json = """
         {
           "updatedAt": "2026-06-25T00:00:00Z",
@@ -115,56 +78,37 @@ final class PetCalendarWidgetSnapshotTests: XCTestCase {
 
         XCTAssertEqual(snapshot.displayLanguage, .japanese)
         XCTAssertTrue(snapshot.showsBranding)
-        XCTAssertNil(snapshot.smallImageFileName)
-        XCTAssertNil(snapshot.mediumImageFileName)
-        XCTAssertNil(snapshot.largeImageFileName)
         XCTAssertTrue(snapshot.renderedImageSets.isEmpty)
-        XCTAssertEqual(snapshot.entries.first?.photoPlacement, .default)
-        XCTAssertEqual(snapshot.entries.first?.overlayStyle, .default)
     }
 
-    func testWidgetSnapshotDecodesLegacyOverlayStyleWithoutWeatherKeys() throws {
-        let json = """
-        {
-          "updatedAt": "2026-06-25T00:00:00Z",
-          "selectedMonth": "2026-06-01T00:00:00Z",
-          "displayLanguage": "english",
-          "showsBranding": true,
-          "entries": [
-            {
-              "id": "2026-06-25",
-              "date": "2026-06-25T00:00:00Z",
-              "thumbnailFileName": "thumb.jpg",
-              "caption": "",
-              "photoPlacement": {
-                "scale": 1.4,
-                "offsetX": 0.1,
-                "offsetY": -0.2
-              },
-              "overlayStyle": {
-                "isThemeIconVisible": true,
-                "themeIcon": "walk",
-                "themeIconCorner": "topRight",
-                "textColor": "white",
-                "accentColor": "blue",
-                "fontStyle": "rounded"
-              }
-            }
-          ]
-        }
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+    func testWidgetSnapshotStoresBrandingFromFreshEntitlementPolicy() throws {
+        let now = date(year: 2026, month: 6, day: 25)
+        let staleLifetime = EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: now.addingTimeInterval(-(EntitlementFreshnessPolicy.maxTrustedAge + 10))
+        )
+        let freshLifetime = EntitlementState(
+            sevenDayPassExpiresAt: nil,
+            hasLifetimePass: true,
+            lastTransactionCheckAt: now
+        )
 
-        let snapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: Data(json.utf8))
-        let entry = try XCTUnwrap(snapshot.entries.first)
+        XCTAssertTrue(WatermarkAccessPolicy(entitlementState: staleLifetime, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess == false)
+        XCTAssertFalse(widgetShowsBranding(for: freshLifetime, now: now))
+        XCTAssertTrue(widgetShowsBranding(for: .free, now: now))
+    }
 
-        XCTAssertEqual(entry.id, "2026-06-25")
-        XCTAssertEqual(entry.thumbnailFileName, "thumb.jpg")
-        XCTAssertEqual(entry.overlayStyle.effectiveThemeIcon, .walk)
-        XCTAssertNil(entry.overlayStyle.effectiveWeatherIcon)
-        XCTAssertEqual(entry.overlayStyle.weatherIconCorner, .bottomRight)
-        XCTAssertEqual(entry.overlayStyle.accentColor, .blue)
+    private func widgetShowsBranding(for state: EntitlementState, now: Date) -> Bool {
+        !WatermarkAccessPolicy(entitlementState: state, now: now, debugOverride: .none).snapshot.hasUnlimitedAccess
+    }
+
+    private func makeRepository() throws -> PetCalendarRepository {
+        try PetCalendarRepository(
+            appRootURL: makeTemporaryDirectory(),
+            widgetRootURL: makeTemporaryDirectory(),
+            calendar: testCalendar
+        )
     }
 
     private func makeTemporaryDirectory() -> URL {

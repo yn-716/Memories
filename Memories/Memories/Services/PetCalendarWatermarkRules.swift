@@ -41,6 +41,8 @@ enum MemoriesDeepLinkRouter {
         let host = url.host?.lowercased()
         let path = url.path.lowercased()
 
+        // Explicit allow-list only. Deep links are navigation-only and must not
+        // trigger registration, deletion, purchase, export, or file operations.
         if host == "calendar" && (path.isEmpty || path == "/") {
             return .petCalendar
         }

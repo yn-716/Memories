@@ -48,12 +48,52 @@ struct EntitlementState: Codable, Hashable {
 
         return sevenDayPassExpiresAt > date
     }
+
+    func isTransactionCheckFresh(
+        now: Date = Date(),
+        maxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge
+    ) -> Bool {
+        guard let lastTransactionCheckAt else {
+            return false
+        }
+
+        return now.timeIntervalSince(lastTransactionCheckAt) <= maxAge
+    }
+
+    func needsTransactionCheck(
+        now: Date = Date(),
+        maxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge,
+        forceIfMissing: Bool = true
+    ) -> Bool {
+        guard lastTransactionCheckAt != nil else {
+            return forceIfMissing
+        }
+
+        return !isTransactionCheckFresh(now: now, maxAge: maxAge)
+    }
+
+    func grantsFreshUnlimitedWatermarkFreeOutput(
+        on date: Date = Date(),
+        maxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge
+    ) -> Bool {
+        grantsUnlimitedWatermarkFreeOutput(on: date)
+            && isTransactionCheckFresh(now: date, maxAge: maxAge)
+    }
+}
+
+enum EntitlementFreshnessPolicy {
+    nonisolated static let maxTrustedAge: TimeInterval = 6 * 60 * 60
 }
 
 struct WatermarkAccessSnapshot: Hashable {
     let canExportWithoutWatermark: Bool
     let remainingFreeExportsToday: Int
     let hasUnlimitedAccess: Bool
+}
+
+protocol WatermarkFreeExportCounting {
+    func remainingExports(on date: Date, calendar: Calendar) -> Int
+    func consumeExport(on date: Date, calendar: Calendar) -> Bool
 }
 
 struct DailyWatermarkFreeExportStore {
@@ -68,6 +108,9 @@ struct DailyWatermarkFreeExportStore {
         self.defaults = defaults
     }
 
+    // This is a lightweight local allowance, not strict billing control. Keep
+    // usage behind WatermarkFreeExportCounting so it can move to Keychain or a
+    // server-verified store without touching export call sites.
     func remainingExports(on date: Date = Date(), calendar: Calendar = .current) -> Int {
         max(0, dailyLimit - usedCount(on: date, calendar: calendar))
     }
@@ -108,10 +151,14 @@ struct DailyWatermarkFreeExportStore {
     }
 }
 
+extension DailyWatermarkFreeExportStore: WatermarkFreeExportCounting {}
+
 struct WatermarkAccessPolicy {
     var entitlementState: EntitlementState
-    var freeExportStore: DailyWatermarkFreeExportStore
+    var freeExportStore: WatermarkFreeExportCounting
     var now: Date
+    var requiresFreshUnlimitedEntitlement: Bool
+    var entitlementMaxAge: TimeInterval
     #if DEBUG
     var debugOverride: DebugEntitlementOverride
     #endif
@@ -119,24 +166,32 @@ struct WatermarkAccessPolicy {
     #if DEBUG
     init(
         entitlementState: EntitlementState,
-        freeExportStore: DailyWatermarkFreeExportStore = .shared,
+        freeExportStore: WatermarkFreeExportCounting = DailyWatermarkFreeExportStore.shared,
         now: Date = Date(),
+        requiresFreshUnlimitedEntitlement: Bool = true,
+        entitlementMaxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge,
         debugOverride: DebugEntitlementOverride = .none
     ) {
         self.entitlementState = entitlementState
         self.freeExportStore = freeExportStore
         self.now = now
+        self.requiresFreshUnlimitedEntitlement = requiresFreshUnlimitedEntitlement
+        self.entitlementMaxAge = entitlementMaxAge
         self.debugOverride = debugOverride
     }
     #else
     init(
         entitlementState: EntitlementState,
-        freeExportStore: DailyWatermarkFreeExportStore = .shared,
-        now: Date = Date()
+        freeExportStore: WatermarkFreeExportCounting = DailyWatermarkFreeExportStore.shared,
+        now: Date = Date(),
+        requiresFreshUnlimitedEntitlement: Bool = true,
+        entitlementMaxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge
     ) {
         self.entitlementState = entitlementState
         self.freeExportStore = freeExportStore
         self.now = now
+        self.requiresFreshUnlimitedEntitlement = requiresFreshUnlimitedEntitlement
+        self.entitlementMaxAge = entitlementMaxAge
     }
     #endif
 
@@ -166,8 +221,10 @@ struct WatermarkAccessPolicy {
         }
         #endif
 
-        let hasUnlimitedAccess = entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now)
-        let remaining = hasUnlimitedAccess ? Int.max : freeExportStore.remainingExports(on: now)
+        let hasUnlimitedAccess = requiresFreshUnlimitedEntitlement
+            ? entitlementState.grantsFreshUnlimitedWatermarkFreeOutput(on: now, maxAge: entitlementMaxAge)
+            : entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now)
+        let remaining = hasUnlimitedAccess ? Int.max : freeExportStore.remainingExports(on: now, calendar: .current)
 
         return WatermarkAccessSnapshot(
             canExportWithoutWatermark: hasUnlimitedAccess || remaining > 0,
@@ -203,10 +260,12 @@ struct WatermarkAccessPolicy {
         }
         #endif
 
-        if entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now) {
+        if requiresFreshUnlimitedEntitlement
+            ? entitlementState.grantsFreshUnlimitedWatermarkFreeOutput(on: now, maxAge: entitlementMaxAge)
+            : entitlementState.grantsUnlimitedWatermarkFreeOutput(on: now) {
             return true
         }
 
-        return freeExportStore.consumeExport(on: now)
+        return freeExportStore.consumeExport(on: now, calendar: .current)
     }
 }

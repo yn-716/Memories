@@ -213,8 +213,31 @@ final class StoreKitManager: ObservableObject {
         )
         return StoreEntitlementRefreshSummary(
             verifiedTransactions: verifiedTransactions,
-            appliedTransactions: appliedTransactions
+            appliedTransactions: appliedTransactions,
+            didRefresh: true
         )
+    }
+
+    @discardableResult
+    func ensureFreshEntitlements(
+        maxAge: TimeInterval = EntitlementFreshnessPolicy.maxTrustedAge,
+        forceIfMissing: Bool = true
+    ) async -> StoreEntitlementRefreshSummary {
+        guard let appState else {
+            return .skipped
+        }
+
+        #if DEBUG
+        if appState.isDebugEntitlementOverrideActive {
+            return .skipped
+        }
+        #endif
+
+        guard appState.entitlementState.needsTransactionCheck(maxAge: maxAge, forceIfMissing: forceIfMissing) else {
+            return .skipped
+        }
+
+        return await refreshCurrentEntitlements()
     }
 
     private func startTransactionUpdates() {
@@ -255,9 +278,17 @@ final class StoreKitManager: ObservableObject {
                 return false
             }
 
-            return appState?.applyPurchasedProduct(id: transaction.productID, purchaseDate: transaction.purchaseDate) ?? false
+            return appState?.applyPurchasedProduct(
+                id: transaction.productID,
+                purchaseDate: transaction.purchaseDate,
+                checkedAt: Date()
+            ) ?? false
         case .lifetimePass:
-            return appState?.applyPurchasedProduct(id: transaction.productID, purchaseDate: transaction.purchaseDate) ?? false
+            return appState?.applyPurchasedProduct(
+                id: transaction.productID,
+                purchaseDate: transaction.purchaseDate,
+                checkedAt: Date()
+            ) ?? false
         }
     }
 
@@ -351,7 +382,7 @@ final class StoreKitManager: ObservableObject {
                 key.localizedCaseInsensitiveContains("storekit")
                     || key.localizedCaseInsensitiveContains("store_kit")
             }
-            .map { key, value in "\(key)=\(value)" }
+            .map { key, _ in "\(key)=<redacted>" }
             .sorted()
 
         if storeKitEntries.isEmpty {
@@ -397,6 +428,13 @@ enum StoreRestoreResult {
 struct StoreEntitlementRefreshSummary {
     let verifiedTransactions: Int
     let appliedTransactions: Int
+    let didRefresh: Bool
+
+    static let skipped = StoreEntitlementRefreshSummary(
+        verifiedTransactions: 0,
+        appliedTransactions: 0,
+        didRefresh: false
+    )
 }
 
 enum StoreKitManagerError: LocalizedError {

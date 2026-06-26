@@ -173,6 +173,16 @@ final class MemoriesAppState: ObservableObject {
         resolvedLanguage.localeIdentifier
     }
 
+    #if DEBUG
+    var isDebugEntitlementOverrideActive: Bool {
+        debugEntitlementOverride != .none
+    }
+    #else
+    var isDebugEntitlementOverrideActive: Bool {
+        false
+    }
+    #endif
+
     var effectiveEntitlementState: EntitlementState {
         #if DEBUG
         switch debugEntitlementOverride {
@@ -220,35 +230,35 @@ final class MemoriesAppState: ObservableObject {
         #endif
     }
 
-    func grantSevenDayPass(from date: Date = Date()) {
+    func grantSevenDayPass(from date: Date = Date(), checkedAt: Date? = nil) {
         let candidateExpiry = PurchaseEntitlementRules.sevenDayPassExpiry(from: date)
         let nextExpiry = max(entitlementState.sevenDayPassExpiresAt ?? .distantPast, candidateExpiry)
 
         entitlementState = EntitlementState(
             sevenDayPassExpiresAt: nextExpiry,
             hasLifetimePass: entitlementState.hasLifetimePass,
-            lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
+            lastTransactionCheckAt: checkedAt ?? entitlementState.lastTransactionCheckAt
         )
         entitlementRefreshID = UUID()
     }
 
-    func grantLifetimePass() {
+    func grantLifetimePass(checkedAt: Date? = nil) {
         entitlementState = EntitlementState(
             sevenDayPassExpiresAt: entitlementState.sevenDayPassExpiresAt,
             hasLifetimePass: true,
-            lastTransactionCheckAt: entitlementState.lastTransactionCheckAt
+            lastTransactionCheckAt: checkedAt ?? entitlementState.lastTransactionCheckAt
         )
         entitlementRefreshID = UUID()
     }
 
     @discardableResult
-    func applyPurchasedProduct(id: String, purchaseDate: Date = Date()) -> Bool {
+    func applyPurchasedProduct(id: String, purchaseDate: Date = Date(), checkedAt: Date? = nil) -> Bool {
         switch PurchaseProductID.matching(productID: id) {
         case .sevenDayPass:
-            grantSevenDayPass(from: purchaseDate)
+            grantSevenDayPass(from: purchaseDate, checkedAt: checkedAt)
             return true
         case .lifetimePass:
-            grantLifetimePass()
+            grantLifetimePass(checkedAt: checkedAt)
             return true
         case nil:
             return false

@@ -32,6 +32,20 @@ struct MemoriesPrimaryButton: View {
 struct MemoriesPrimaryButtonLabel: View {
     let title: String
     let systemImage: String?
+    let gradientColors: [Color]
+    let shadowColor: Color
+
+    init(
+        title: String,
+        systemImage: String?,
+        gradientColors: [Color] = [MemoriesTheme.accentDeep.opacity(0.94), MemoriesTheme.accent.opacity(0.82)],
+        shadowColor: Color = MemoriesTheme.accentDeep.opacity(0.12)
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.gradientColors = gradientColors
+        self.shadowColor = shadowColor
+    }
 
     var body: some View {
         Label {
@@ -52,7 +66,7 @@ struct MemoriesPrimaryButtonLabel: View {
         .foregroundStyle(.white)
         .background(
             LinearGradient(
-                colors: [MemoriesTheme.accentDeep.opacity(0.94), MemoriesTheme.accent.opacity(0.82)],
+                colors: gradientColors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -62,7 +76,7 @@ struct MemoriesPrimaryButtonLabel: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(.white.opacity(0.34), lineWidth: 1)
         }
-        .shadow(color: MemoriesTheme.accentDeep.opacity(0.12), radius: 10, y: 5)
+        .shadow(color: shadowColor, radius: 10, y: 5)
     }
 }
 

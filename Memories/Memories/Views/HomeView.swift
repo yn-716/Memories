@@ -53,7 +53,15 @@ struct HomeView: View {
                             Button {
                                 showPetCalendar = true
                             } label: {
-                                HomeActionRow(title: appState.t("home.petCalendar"), systemImage: "calendar")
+                                MemoriesPrimaryButtonLabel(
+                                    title: appState.t("home.petCalendar"),
+                                    systemImage: "calendar",
+                                    gradientColors: [
+                                        Color(hex: "#5E927F").opacity(0.96),
+                                        Color(hex: "#9AD3BF").opacity(0.86)
+                                    ],
+                                    shadowColor: Color(hex: "#5E927F").opacity(0.13)
+                                )
                             }
                             .buttonStyle(.plain)
 

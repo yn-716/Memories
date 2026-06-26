@@ -37,6 +37,37 @@ enum PetCalendarWidgetRenderedImageFamily: CaseIterable, Hashable {
     }
 }
 
+private extension UIImage {
+    func croppedToWatermarkLogo() -> UIImage? {
+        guard let cgImage else {
+            return nil
+        }
+
+        // The app icon intentionally has generous quiet space. Crop it only for the tiny
+        // watermark pill so the real icon mark remains legible beside the brand name.
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        let side = min(width, height) * 0.80
+        let cropRect = CGRect(
+            x: width * 0.56 - side / 2,
+            y: height * 0.52 - side / 2,
+            width: side,
+            height: side
+        )
+        .intersection(CGRect(x: 0, y: 0, width: width, height: height))
+        .integral
+
+        guard cropRect.width > 0,
+              cropRect.height > 0,
+              let croppedImage = cgImage.cropping(to: cropRect)
+        else {
+            return nil
+        }
+
+        return UIImage(cgImage: croppedImage, scale: scale, orientation: imageOrientation)
+    }
+}
+
 struct PetCalendarWidgetRenderedImage {
     var family: PetCalendarWidgetRenderedImageFamily
     var fileName: String
@@ -522,8 +553,8 @@ struct PetCalendarWidgetRenderer {
     ) {
         let brandName = WatermarkRenderer.brandName
         let height = maxRect.height
-        let padding = height * 0.24
-        let iconSide = height * 0.58
+        let padding = height * 0.20
+        let iconSide = height * 0.68
         let font = UIFont.systemFont(ofSize: compact ? height * 0.34 : height * 0.36, weight: .semibold)
         let textAttributes: [NSAttributedString.Key: Any] = [
             .font: font,
@@ -532,7 +563,7 @@ struct PetCalendarWidgetRenderer {
         let textSize = NSString(string: brandName).size(withAttributes: textAttributes)
         let appIcon = UIImage(named: "watermark_app_icon")
         let iconWidth = appIcon == nil ? CGFloat.zero : iconSide
-        let spacing = appIcon == nil ? CGFloat.zero : height * 0.14
+        let spacing = appIcon == nil ? CGFloat.zero : height * 0.10
         let rawWidth = padding * 2 + iconWidth + spacing + textSize.width
         let pillWidth = min(maxRect.width, ceil(rawWidth))
         let rect = CGRect(
@@ -555,11 +586,8 @@ struct PetCalendarWidgetRenderer {
         var textMinX = rect.minX + padding
         if let icon = appIcon {
             let iconRect = CGRect(x: rect.minX + padding, y: rect.midY - iconSide / 2, width: iconSide, height: iconSide)
-            context.saveGState()
-            UIBezierPath(roundedRect: iconRect, cornerRadius: iconSide * 0.18).addClip()
-            icon.draw(in: iconRect, blendMode: .normal, alpha: 0.78)
-            context.restoreGState()
-            textMinX = iconRect.maxX + rect.height * 0.14
+            drawWatermarkAppIcon(icon, in: iconRect, context: context)
+            textMinX = iconRect.maxX + spacing
         }
 
         drawText(
@@ -569,6 +597,27 @@ struct PetCalendarWidgetRenderer {
             color: UIColor.white.withAlphaComponent(0.92),
             alignment: .left
         )
+    }
+
+    private func drawWatermarkAppIcon(_ icon: UIImage, in rect: CGRect, context: CGContext) {
+        let cornerRadius = rect.width * 0.18
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: cornerRadius)
+
+        context.saveGState()
+        UIColor.white.withAlphaComponent(0.90).setFill()
+        path.fill()
+        path.addClip()
+        let drawRect = rect.insetBy(dx: rect.width * 0.02, dy: rect.height * 0.02)
+        if let croppedIcon = icon.croppedToWatermarkLogo() {
+            croppedIcon.draw(in: drawRect, blendMode: .normal, alpha: 0.96)
+        } else {
+            icon.draw(in: drawRect, blendMode: .normal, alpha: 0.96)
+        }
+        context.restoreGState()
+
+        UIColor.white.withAlphaComponent(0.24).setStroke()
+        path.lineWidth = 0.8
+        path.stroke()
     }
 
     private func weekTitle(for week: [PetCalendarWeekDay], language: PetCalendarDisplayLanguage) -> String {

@@ -222,6 +222,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         try repository.writeWidgetSnapshot(entries: repository.loadEntries(), selectedMonth: now)
         let secondSnapshot = try decoder.decode(PetCalendarWidgetSnapshot.self, from: Data(contentsOf: snapshotURL))
         let secondFileNames = secondSnapshot.renderedImageSets.flatMap(\.fileNames)
+        let remainingWidgetImageNames = try widgetRenderedImageNames(in: repository.widgetDirectoryURL)
 
         XCTAssertNotEqual(firstFileNames, secondFileNames)
         for fileName in firstFileNames {
@@ -230,6 +231,7 @@ final class PetCalendarRepositoryTests: XCTestCase {
         for fileName in secondFileNames {
             XCTAssertTrue(FileManager.default.fileExists(atPath: repository.widgetDirectoryURL.appendingPathComponent(fileName).path))
         }
+        XCTAssertEqual(Set(remainingWidgetImageNames), Set(secondFileNames))
     }
 
     func testLegacyAppGroupDataMigratesToApplicationSupportAndDeletesOldPrivateFiles() throws {
@@ -367,5 +369,12 @@ final class PetCalendarRepositoryTests: XCTestCase {
             return FileProtectionType(rawValue: rawValue as String)
         }
         return nil
+    }
+
+    private func widgetRenderedImageNames(in directory: URL) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .map(\.lastPathComponent)
+            .filter { $0.hasPrefix("pet-calendar-widget-") && $0.hasSuffix(".jpg") }
+            .sorted()
     }
 }

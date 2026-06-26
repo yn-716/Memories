@@ -66,6 +66,36 @@ final class PetCalendarRenderingTests: XCTestCase {
         XCTAssertGreaterThan(pixel.blue, 230)
     }
 
+    func testSmallWidgetDoesNotFallbackToPreviousDayPhotoWhenTodayIsUnregistered() throws {
+        let yesterday = date(year: 2026, month: 6, day: 24)
+        let today = date(year: 2026, month: 6, day: 25)
+        let entry = PetCalendarDayEntry(
+            id: "2026-06-24",
+            date: yesterday,
+            imageFileName: "yesterday.jpg",
+            thumbnailFileName: "yesterday-thumb.jpg",
+            caption: "",
+            photoPlacement: .default,
+            overlayStyle: .default,
+            createdAt: yesterday,
+            updatedAt: yesterday
+        )
+        let renderedImages = PetCalendarWidgetRenderer().renderAll(
+            snapshot: PetCalendarWidgetSnapshot(
+                updatedAt: today,
+                selectedMonth: date(year: 2026, month: 6, day: 1),
+                displayLanguage: .english,
+                showsBranding: false
+            ),
+            entries: [entry],
+            thumbnailsByID: ["2026-06-24": makeImage(color: .red)],
+            now: today
+        )
+        let smallImage = try XCTUnwrap(renderedImages.first { $0.family == .small }?.image)
+
+        XCTAssertEqual(redDominantPixelCount(in: smallImage), 0)
+    }
+
     func testMonthGridMarksOutsideMonthSeparatelyFromUnregisteredDays() {
         let cells = PetCalendarDateRules.monthGrid(
             for: date(year: 2026, month: 6, day: 1),
@@ -132,6 +162,17 @@ final class PetCalendarRenderingTests: XCTestCase {
         UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40)).image { context in
             color.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        }
+    }
+
+    private func redDominantPixelCount(in image: UIImage) -> Int {
+        stride(from: 140, through: 420, by: 70).reduce(0) { total, x in
+            total + stride(from: 160, through: 400, by: 60).filter { y in
+                guard let pixel = image.rgbaPixel(at: CGPoint(x: x, y: y)) else {
+                    return false
+                }
+                return pixel.red > pixel.green + 45 && pixel.red > pixel.blue + 45
+            }.count
         }
     }
 }

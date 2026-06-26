@@ -267,10 +267,16 @@ struct PetCalendarRepository {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(snapshot)
-        try data.write(to: widgetSnapshotURL, options: widgetReadableWriteOptions)
-        protectItemIfPossible(at: widgetSnapshotURL, attributes: widgetReadableFileAttributes)
-        removeObsoleteWidgetRenderedImages(keeping: Set(renderedImageSets.flatMap(\.fileNames)))
+        let renderedFileNames = Set(renderedImageSets.flatMap(\.fileNames))
+        do {
+            let data = try encoder.encode(snapshot)
+            try data.write(to: widgetSnapshotURL, options: widgetReadableWriteOptions)
+            protectItemIfPossible(at: widgetSnapshotURL, attributes: widgetReadableFileAttributes)
+            removeObsoleteWidgetRenderedImages(keeping: renderedFileNames)
+        } catch {
+            removeWidgetRenderedImages(named: renderedFileNames)
+            throw error
+        }
     }
 
     var widgetDirectoryURL: URL {
@@ -303,37 +309,44 @@ struct PetCalendarRepository {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) ?? now.addingTimeInterval(86_400)
         let renderDates = [now, tomorrow]
         let renderer = PetCalendarWidgetRenderer()
+        var createdFileNames: Set<String> = []
 
-        return try renderDates.map { renderDate in
-            let dayID = PetCalendarDateRules.id(for: renderDate, calendar: calendar)
-            let renderedImages = renderer.renderAll(
-                snapshot: snapshot,
-                entries: entries,
-                thumbnailsByID: thumbnailsByID,
-                now: renderDate
-            )
-            let versionID = "\(dayID)-\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString)"
-            var renderedFileNames: [PetCalendarWidgetRenderedImageFamily: String] = [:]
-
-            for renderedImage in renderedImages {
-                guard let data = renderedImage.image.jpegData(compressionQuality: 0.84) else {
-                    throw PetCalendarRepositoryError.imageWriteFailed
-                }
-                let fileName = renderedImage.family.fileName(versionID: versionID)
-                let url = widgetDirectory.appendingPathComponent(fileName)
-                try data.write(to: url, options: widgetReadableWriteOptions)
-                protectItemIfPossible(at: url, attributes: widgetReadableFileAttributes)
-                renderedFileNames[renderedImage.family] = fileName
-            }
-
-            return PetCalendarWidgetRenderedImageSet(
-                dayID: dayID,
-                imageNames: PetCalendarWidgetRenderedImageNames(
-                    small: renderedFileNames[.small] ?? PetCalendarWidgetRenderedImageFamily.small.fileName(versionID: versionID),
-                    medium: renderedFileNames[.medium] ?? PetCalendarWidgetRenderedImageFamily.medium.fileName(versionID: versionID),
-                    large: renderedFileNames[.large] ?? PetCalendarWidgetRenderedImageFamily.large.fileName(versionID: versionID)
+        do {
+            return try renderDates.map { renderDate in
+                let dayID = PetCalendarDateRules.id(for: renderDate, calendar: calendar)
+                let renderedImages = renderer.renderAll(
+                    snapshot: snapshot,
+                    entries: entries,
+                    thumbnailsByID: thumbnailsByID,
+                    now: renderDate
                 )
-            )
+                let versionID = "\(dayID)-\(Int(Date().timeIntervalSince1970 * 1000))-\(UUID().uuidString)"
+                var renderedFileNames: [PetCalendarWidgetRenderedImageFamily: String] = [:]
+
+                for renderedImage in renderedImages {
+                    guard let data = renderedImage.image.jpegData(compressionQuality: 0.84) else {
+                        throw PetCalendarRepositoryError.imageWriteFailed
+                    }
+                    let fileName = renderedImage.family.fileName(versionID: versionID)
+                    let url = widgetDirectory.appendingPathComponent(fileName)
+                    try data.write(to: url, options: widgetReadableWriteOptions)
+                    protectItemIfPossible(at: url, attributes: widgetReadableFileAttributes)
+                    createdFileNames.insert(fileName)
+                    renderedFileNames[renderedImage.family] = fileName
+                }
+
+                return PetCalendarWidgetRenderedImageSet(
+                    dayID: dayID,
+                    imageNames: PetCalendarWidgetRenderedImageNames(
+                        small: renderedFileNames[.small] ?? PetCalendarWidgetRenderedImageFamily.small.fileName(versionID: versionID),
+                        medium: renderedFileNames[.medium] ?? PetCalendarWidgetRenderedImageFamily.medium.fileName(versionID: versionID),
+                        large: renderedFileNames[.large] ?? PetCalendarWidgetRenderedImageFamily.large.fileName(versionID: versionID)
+                    )
+                )
+            }
+        } catch {
+            removeWidgetRenderedImages(named: createdFileNames)
+            throw error
         }
     }
 
@@ -355,6 +368,18 @@ struct PetCalendarRepository {
                 continue
             }
             try? fileManager.removeItem(at: url)
+        }
+    }
+
+    private func removeWidgetRenderedImages(named fileNames: Set<String>) {
+        for fileName in fileNames {
+            guard
+                fileName.hasPrefix("pet-calendar-widget-"),
+                fileName.hasSuffix(".jpg")
+            else {
+                continue
+            }
+            try? fileManager.removeItem(at: widgetDirectory.appendingPathComponent(fileName))
         }
     }
 

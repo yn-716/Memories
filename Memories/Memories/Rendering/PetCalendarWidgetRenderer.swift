@@ -154,7 +154,7 @@ struct PetCalendarWidgetRenderer {
         bounds: CGRect
     ) {
         let card = bounds.insetBy(dx: 20, dy: 20)
-        let entry = todayEntry(entries: entries, now: now) ?? featuredEntry(entries: entries, now: now)
+        let entry = todayEntry(entries: entries, now: now)
         let image = entry.flatMap { thumbnailsByID[$0.id] }
 
         drawGlassSurface(in: card, cornerRadius: 52, context: context)
@@ -434,13 +434,6 @@ struct PetCalendarWidgetRenderer {
     private func todayEntry(entries: [PetCalendarDayEntry], now: Date) -> PetCalendarDayEntry? {
         let todayID = PetCalendarDateRules.id(for: now, calendar: calendar)
         return entries.first { $0.id == todayID }
-    }
-
-    private func featuredEntry(entries: [PetCalendarDayEntry], now: Date) -> PetCalendarDayEntry? {
-        let today = PetCalendarDateRules.startOfDay(for: now, calendar: calendar)
-        return entries
-            .filter { PetCalendarDateRules.startOfDay(for: $0.date, calendar: calendar) <= today }
-            .max { $0.date < $1.date }
     }
 
     private func drawGlassSurface(

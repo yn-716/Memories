@@ -239,7 +239,7 @@ struct PreviewSaveView: View {
             }
 
             HStack(spacing: 8) {
-                WatermarkOptionButton(
+                MemoriesWatermarkOptionButton(
                     title: appState.t("preview.withWatermark"),
                     subtitle: appState.t("common.unlimited"),
                     systemImage: "checkmark.seal",
@@ -249,7 +249,7 @@ struct PreviewSaveView: View {
                     selectWatermarkOption(.withWatermark)
                 }
 
-                WatermarkOptionButton(
+                MemoriesWatermarkOptionButton(
                     title: appState.t("preview.withoutWatermark"),
                     subtitle: withoutWatermarkOptionSubtitle,
                     systemImage: "seal",
@@ -682,73 +682,6 @@ private struct PreviewOutputAlert: Identifiable {
     let id = UUID()
     let title: String
     let message: String?
-}
-
-private struct WatermarkOptionButton: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let isSelected: Bool
-    let isEnabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.subheadline.weight(.semibold))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                    Text(subtitle)
-                        .font(.caption2.weight(.medium))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(backgroundColor)
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(borderColor, lineWidth: 1)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.48)
-    }
-
-    private var foregroundColor: Color {
-        if isSelected {
-            return MemoriesTheme.accentDeep
-        }
-
-        return MemoriesTheme.textSub
-    }
-
-    private var backgroundColor: Color {
-        if isSelected {
-            return MemoriesTheme.accent.opacity(0.18)
-        }
-
-        return MemoriesTheme.card.opacity(0.48)
-    }
-
-    private var borderColor: Color {
-        if isSelected {
-            return MemoriesTheme.accent.opacity(0.68)
-        }
-
-        return MemoriesTheme.border.opacity(0.72)
-    }
 }
 
 #Preview {

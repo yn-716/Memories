@@ -1331,16 +1331,20 @@ struct PetCalendarPreviewView: View {
                 .foregroundStyle(MemoriesTheme.textSub)
 
             HStack(spacing: 8) {
-                CalendarWatermarkButton(
+                MemoriesWatermarkOptionButton(
                     title: appState.t("calendar.withWatermark"),
+                    subtitle: appState.t("common.unlimited"),
+                    systemImage: "checkmark.seal",
                     isSelected: watermarkOption == .withWatermark,
                     isEnabled: true
                 ) {
                     selectWatermarkOption(.withWatermark)
                 }
 
-                CalendarWatermarkButton(
+                MemoriesWatermarkOptionButton(
                     title: appState.t("calendar.withoutWatermark"),
+                    subtitle: withoutWatermarkOptionSubtitle,
+                    systemImage: "seal",
                     isSelected: watermarkOption == .withoutWatermark,
                     isEnabled: CalendarWatermarkExportRules.canSelect(.withoutWatermark, snapshot: watermarkAccessSnapshot)
                 ) {
@@ -1349,8 +1353,12 @@ struct PetCalendarPreviewView: View {
             }
         }
         .padding(12)
-        .background(PetCalendarAquaSurface(cornerRadius: 8))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(MemoriesTheme.card.opacity(0.48))
+        .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+        }
     }
 
     private func renderCalendar() {
@@ -1449,6 +1457,18 @@ struct PetCalendarPreviewView: View {
 
     private var watermarkAccessSnapshot: WatermarkAccessSnapshot {
         appState.watermarkPolicy().snapshot
+    }
+
+    private var withoutWatermarkOptionSubtitle: String {
+        if watermarkAccessSnapshot.hasUnlimitedAccess {
+            return appState.t("common.unlimited")
+        }
+
+        if watermarkAccessSnapshot.remainingFreeExportsToday > 0 {
+            return String(format: appState.t("preview.remainingToday"), watermarkAccessSnapshot.remainingFreeExportsToday)
+        }
+
+        return appState.t("common.used")
     }
 
     private func selectWatermarkOption(_ option: WatermarkExportOption) {
@@ -1573,35 +1593,6 @@ struct PetCalendarPawShape: Shape {
             height: side * 0.18
         ))
         return path
-    }
-}
-
-private struct CalendarWatermarkButton: View {
-    let title: String
-    let isSelected: Bool
-    let isEnabled: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.68)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .foregroundStyle(isSelected ? .white : MemoriesTheme.accentDeep)
-                .background(isSelected ? MemoriesTheme.accentDeep : Color.clear)
-                .background {
-                    if !isSelected {
-                        PetCalendarAquaSurface(cornerRadius: 12)
-                    }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

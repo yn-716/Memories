@@ -120,6 +120,62 @@ struct MemoriesSecondaryButton: View {
     }
 }
 
+struct MemoriesWatermarkOptionButton: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let isSelected: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    Text(subtitle)
+                        .font(.caption2.weight(.medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(backgroundColor)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .stroke(borderColor, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.48)
+    }
+
+    private var foregroundColor: Color {
+        isSelected ? MemoriesTheme.accentDeep : MemoriesTheme.textSub
+    }
+
+    private var backgroundColor: Color {
+        isSelected ? MemoriesTheme.accent.opacity(0.18) : MemoriesTheme.card.opacity(0.48)
+    }
+
+    private var borderColor: Color {
+        isSelected ? MemoriesTheme.accent.opacity(0.68) : MemoriesTheme.border.opacity(0.72)
+    }
+}
+
 struct MemoriesGlassPanel<Content: View>: View {
     let content: Content
 

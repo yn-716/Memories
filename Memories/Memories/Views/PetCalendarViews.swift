@@ -958,8 +958,7 @@ struct PetCalendarDayEditorView: View {
                 ForEach(PetCalendarWeatherIcon.allCases) { icon in
                     Button {
                         withAnimation(.easeInOut(duration: 0.16)) {
-                            enableWeatherIconIfNeeded()
-                            overlayStyle.weatherIcon = icon
+                            overlayStyle.selectWeatherIcon(icon)
                         }
                     } label: {
                         VStack(spacing: 6) {

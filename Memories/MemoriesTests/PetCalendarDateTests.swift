@@ -81,6 +81,34 @@ final class PetCalendarDateTests: XCTestCase {
         XCTAssertEqual(placement.offsetY, 1)
     }
 
+    func testSelectingWeatherIconPreservesEditedAccentColor() {
+        var style = PetCalendarOverlayStyle.default
+        style.isWeatherIconVisible = true
+        style.weatherIcon = .sunny
+        style.accentColor = .white
+
+        style.selectWeatherIcon(.rainy)
+
+        XCTAssertEqual(style.weatherIcon, .rainy)
+        XCTAssertEqual(style.accentColor, .white)
+
+        style.accentColor = .navy
+        style.selectWeatherIcon(.snowy)
+
+        XCTAssertEqual(style.weatherIcon, .snowy)
+        XCTAssertEqual(style.accentColor, .navy)
+    }
+
+    func testFirstWeatherIconSelectionAppliesReadableDefaultAccentColor() {
+        var style = PetCalendarOverlayStyle.default
+
+        style.selectWeatherIcon(.cloudy)
+
+        XCTAssertTrue(style.isWeatherIconVisible)
+        XCTAssertEqual(style.weatherIcon, .cloudy)
+        XCTAssertEqual(style.accentColor, .blue)
+    }
+
     func testWeekModelStartsOnSundayAndIncludesToday() {
         let calendar = testCalendar
         let today = date(year: 2026, month: 6, day: 25)

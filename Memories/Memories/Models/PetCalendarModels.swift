@@ -397,6 +397,15 @@ struct PetCalendarOverlayStyle: Codable, Hashable {
     var effectiveWeatherIcon: PetCalendarWeatherIcon? {
         isWeatherIconVisible ? (weatherIcon ?? .sunny) : nil
     }
+
+    mutating func selectWeatherIcon(_ icon: PetCalendarWeatherIcon) {
+        let shouldApplyReadableDefaultAccent = !isWeatherIconVisible && weatherIcon == nil && accentColor == .white
+        isWeatherIconVisible = true
+        weatherIcon = icon
+        if shouldApplyReadableDefaultAccent {
+            accentColor = .blue
+        }
+    }
 }
 
 struct PetCalendarDayEntry: Codable, Identifiable, Hashable {

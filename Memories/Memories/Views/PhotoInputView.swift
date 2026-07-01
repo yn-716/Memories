@@ -12,10 +12,10 @@ struct PhotoInputView: View {
                         Image(systemName: "photo")
                             .font(.system(size: 44, weight: .regular))
                             .foregroundStyle(MemoriesTheme.accentDeep)
-                        Text("写真")
+                        Text("写真・動画")
                             .font(.headline)
                             .foregroundStyle(MemoriesTheme.textMain)
-                        Text("ペット写真を1枚選ぶ")
+                        Text("ペットの写真や動画を1つ選ぶ")
                             .font(.subheadline)
                             .foregroundStyle(MemoriesTheme.textSub)
                     }
@@ -29,7 +29,7 @@ struct PhotoInputView: View {
 
             MemoriesGlassPanel {
                 VStack(spacing: 8) {
-                    Text("ホームの「写真を選ぶ」から写真ライブラリを開けます。")
+                    Text("ホームの「写真・動画編集」からライブラリを開けます。")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(MemoriesTheme.textSub)
                         .multilineTextAlignment(.center)
@@ -41,9 +41,9 @@ struct PhotoInputView: View {
         }
         .padding(24)
         .background(MemoriesTheme.background.ignoresSafeArea())
-        .navigationTitle("写真を選ぶ")
+        .navigationTitle("写真・動画を選ぶ")
         .navigationBarTitleDisplayMode(.inline)
-        // TODO: PhotosPickerで写真ライブラリ選択をPhase 2以降で接続する。
+        // TODO: PhotosPickerでライブラリ選択をPhase 2以降で接続する。
     }
 }
 

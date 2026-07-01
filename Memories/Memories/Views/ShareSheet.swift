@@ -18,8 +18,9 @@ struct ShareSheet: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
-struct ShareImageItem: Identifiable {
+struct ShareMediaItem: Identifiable {
     let id = UUID()
-    let image: UIImage
+    let item: Any
     let consumesFreeWatermarkAllowance: Bool
+    let cleanupURL: URL?
 }

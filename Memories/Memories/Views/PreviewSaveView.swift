@@ -1,10 +1,11 @@
+import AVKit
 import SwiftUI
 import UIKit
 
 struct PreviewSaveView: View {
     let template: Template
     let editState: CardEditState
-    let photoImage: UIImage?
+    let media: EditableMedia?
     let draftID: UUID?
     let onDraftSaved: (UUID) -> Void
     let onDraftDeleted: () -> Void
@@ -14,9 +15,10 @@ struct PreviewSaveView: View {
     @EnvironmentObject private var appState: MemoriesAppState
     @EnvironmentObject private var storeKitManager: StoreKitManager
     @State private var renderedImage: UIImage?
+    @State private var renderedVideoURL: URL?
     @State private var isProcessing = false
     @State private var outputAlert: PreviewOutputAlert?
-    @State private var shareItem: ShareImageItem?
+    @State private var shareItem: ShareMediaItem?
     @State private var showExistingDraftDecision = false
     @State private var showNewDraftDecision = false
     @State private var currentDraftID: UUID?
@@ -31,7 +33,7 @@ struct PreviewSaveView: View {
     init(
         template: Template,
         editState: CardEditState,
-        photoImage: UIImage?,
+        media: EditableMedia?,
         draftID: UUID?,
         onDraftSaved: @escaping (UUID) -> Void = { _ in },
         onDraftDeleted: @escaping () -> Void = {},
@@ -39,7 +41,7 @@ struct PreviewSaveView: View {
     ) {
         self.template = template
         self.editState = editState
-        self.photoImage = photoImage
+        self.media = media
         self.draftID = draftID
         self.onDraftSaved = onDraftSaved
         self.onDraftDeleted = onDraftDeleted
@@ -76,11 +78,15 @@ struct PreviewSaveView: View {
         .task {
             await refreshEntitlementsForWatermarkDecisionIfNeeded()
             applyInitialWatermarkOptionIfNeeded()
-            renderIfNeeded()
+            await prepareOutputIfNeeded()
         }
         .onChange(of: watermarkOption) { _, _ in
-            renderedImage = nil
-            renderIfNeeded()
+            guard isOutputReady else {
+                return
+            }
+            Task {
+                await regenerateOutputForWatermarkChange()
+            }
         }
         .onChange(of: appState.entitlementRefreshID) { _, _ in
             applyInitialWatermarkOptionIfNeeded()
@@ -144,7 +150,7 @@ struct PreviewSaveView: View {
             Text(String(format: appState.t("drafts.full.message"), appState.draftLimit))
         }
         .sheet(item: $shareItem) { item in
-            ShareSheet(items: [item.image]) { completed, error in
+            ShareSheet(items: [item.item]) { completed, error in
                 handleShareCompletion(for: item, completed: completed, error: error)
             }
         }
@@ -154,11 +160,33 @@ struct PreviewSaveView: View {
         .navigationDestination(isPresented: $showDraftsFromLimit) {
             DraftsView()
         }
+        .onDisappear {
+            MediaFileManager.shared.removeTemporaryFileIfPossible(at: renderedVideoURL)
+            renderedVideoURL = nil
+            _ = try? MediaFileManager.shared.cleanupTemporaryFiles()
+        }
     }
 
     @ViewBuilder
     private func previewImage(in screenSize: CGSize) -> some View {
-        if let renderedImage {
+        if media?.kind == .video, let renderedVideoURL {
+            let videoAspectRatio = outputAspectRatio
+            let maxWidth = max(180, min(screenSize.width, MemoriesLayoutMetrics.previewMaxWidth) - 40)
+            let reservedPanelHeight: CGFloat = 352
+            let maxHeight = max(240, min(screenSize.height * 0.58, screenSize.height - reservedPanelHeight))
+            let previewWidth = min(maxWidth, maxHeight * videoAspectRatio)
+            let previewHeight = previewWidth / videoAspectRatio
+
+            PreviewLoopingVideoPlayerView(url: renderedVideoURL)
+                .frame(width: previewWidth, height: previewHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(MemoriesTheme.border.opacity(0.72), lineWidth: 1)
+                }
+                .shadow(color: MemoriesTheme.accentDeep.opacity(0.13), radius: 24, y: 14)
+                .padding(.horizontal, 20)
+        } else if let renderedImage {
             let imageAspectRatio = renderedImage.size.width / max(renderedImage.size.height, 1)
             let maxWidth = max(180, min(screenSize.width, MemoriesLayoutMetrics.previewMaxWidth) - 40)
             let reservedPanelHeight: CGFloat = 352
@@ -201,19 +229,19 @@ struct PreviewSaveView: View {
                 watermarkPicker
 
                 HStack(spacing: 10) {
-                    MemoriesPrimaryButton(appState.t("preview.savePhoto"), systemImage: "square.and.arrow.down") {
+                    MemoriesPrimaryButton(appState.t("preview.saveMedia"), systemImage: "square.and.arrow.down") {
                         Task {
                             await saveToPhotoLibrary()
                         }
                     }
-                    .disabled(renderedImage == nil || isProcessing)
+                    .disabled(!isOutputReady || isProcessing)
 
             MemoriesSecondaryButton(appState.t("preview.share"), systemImage: "square.and.arrow.up") {
                 Task {
                     await prepareShare()
                 }
             }
-                    .disabled(renderedImage == nil || isProcessing)
+                    .disabled(!isOutputReady || isProcessing)
                 }
 
                 MemoriesSecondaryButton(appState.t("preview.backToEdit"), systemImage: "chevron.left") {
@@ -346,15 +374,80 @@ struct PreviewSaveView: View {
         }
     }
 
-    private func renderIfNeeded() {
-        guard renderedImage == nil else {
+    @MainActor
+    private func prepareOutputIfNeeded() async {
+        if isOutputReady {
             return
         }
 
-        renderedImage = renderFinalImage()
-        if renderedImage == nil {
-            outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: appState.t("preview.imageGenerateFailed"))
+        if media?.kind == .video {
+            if let renderedVideoURL, !FileManager.default.fileExists(atPath: renderedVideoURL.path) {
+                self.renderedVideoURL = nil
+            }
+            await exportVideoIfNeeded()
+        } else {
+            renderedImage = renderFinalImage()
+            if renderedImage == nil {
+                outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: appState.t("preview.imageGenerateFailed"))
+            }
         }
+    }
+
+    @MainActor
+    private func exportVideoIfNeeded() async {
+        if let renderedVideoURL, FileManager.default.fileExists(atPath: renderedVideoURL.path) {
+            return
+        }
+
+        guard let media else {
+            outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: appState.t("preview.videoGenerateFailed"))
+            return
+        }
+
+        isProcessing = true
+        defer { isProcessing = false }
+
+        do {
+            renderedVideoURL = try await exportVideo(media: media)
+        } catch {
+            outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func regenerateOutputForWatermarkChange() async {
+        if media?.kind == .video {
+            guard let media else {
+                outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: appState.t("preview.videoGenerateFailed"))
+                return
+            }
+
+            let previousURL = renderedVideoURL
+            isProcessing = true
+            defer { isProcessing = false }
+
+            do {
+                let newURL = try await exportVideo(media: media)
+                renderedVideoURL = newURL
+                MediaFileManager.shared.removeTemporaryFileIfPossible(at: previousURL)
+            } catch {
+                outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: error.localizedDescription)
+            }
+        } else {
+            renderedImage = renderFinalImage()
+            if renderedImage == nil {
+                outputAlert = PreviewOutputAlert(title: appState.t("preview.renderFailed"), message: appState.t("preview.imageGenerateFailed"))
+            }
+        }
+    }
+
+    private func exportVideo(media: EditableMedia) async throws -> URL {
+        try await VideoTemplateExporter().export(
+            media: media,
+            template: template,
+            editState: editState,
+            watermarkMode: watermarkOption.watermarkMode
+        )
     }
 
     @MainActor
@@ -363,20 +456,31 @@ struct PreviewSaveView: View {
             return
         }
 
-        guard let image = preparedImage() else {
-            outputAlert = PreviewOutputAlert(title: appState.t("preview.saveFailed"), message: appState.t("preview.imageGenerateFailed"))
-            return
-        }
+        await prepareOutputIfNeeded()
 
         isProcessing = true
         defer { isProcessing = false }
 
         do {
-            try await PhotoLibrarySaver().save(image)
+            if media?.kind == .video {
+                guard let renderedVideoURL else {
+                    outputAlert = PreviewOutputAlert(title: appState.t("preview.saveFailed"), message: appState.t("preview.videoGenerateFailed"))
+                    return
+                }
+                try await PhotoLibrarySaver().saveVideo(at: renderedVideoURL)
+            } else {
+                guard let image = preparedImage() else {
+                    outputAlert = PreviewOutputAlert(title: appState.t("preview.saveFailed"), message: appState.t("preview.imageGenerateFailed"))
+                    return
+                }
+                try await PhotoLibrarySaver().save(image)
+            }
             guard consumeWatermarkAllowanceIfNeeded() else {
                 outputAlert = PreviewOutputAlert(title: appState.t("preview.saveComplete"), message: appState.t("preview.todayUsed"))
                 return
             }
+
+            ReviewRequestManager.shared.recordSuccessfulSaveAndRequestReviewIfEligible()
 
             if currentDraftID != nil {
                 showExistingDraftDecision = true
@@ -410,18 +514,39 @@ struct PreviewSaveView: View {
             }
         }
 
-        guard let image = preparedImage() else {
-            outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: appState.t("preview.imageGenerateFailed"))
-            return
-        }
+        await prepareOutputIfNeeded()
 
-        shareItem = ShareImageItem(
-            image: image,
-            consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance
-        )
+        do {
+            if media?.kind == .video {
+                guard let renderedVideoURL else {
+                    outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: appState.t("preview.videoGenerateFailed"))
+                    return
+                }
+                let shareURL = try MediaFileManager.shared.copyTemporaryShareFile(from: renderedVideoURL)
+                shareItem = ShareMediaItem(
+                    item: shareURL,
+                    consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance,
+                    cleanupURL: shareURL
+                )
+            } else {
+                guard let image = preparedImage() else {
+                    outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: appState.t("preview.imageGenerateFailed"))
+                    return
+                }
+                shareItem = ShareMediaItem(
+                    item: image,
+                    consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance,
+                    cleanupURL: nil
+                )
+            }
+        } catch {
+            outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: error.localizedDescription)
+        }
     }
 
-    private func handleShareCompletion(for item: ShareImageItem, completed: Bool, error: Error?) {
+    private func handleShareCompletion(for item: ShareMediaItem, completed: Bool, error: Error?) {
+        MediaFileManager.shared.removeTemporaryFileIfPossible(at: item.cleanupURL)
+
         if let error {
             outputAlert = PreviewOutputAlert(title: appState.t("preview.shareFailed"), message: error.localizedDescription)
             return
@@ -452,10 +577,33 @@ struct PreviewSaveView: View {
             configuration: TemplateRenderConfiguration(
                 template: template,
                 editState: editState,
-                photoImage: photoImage,
+                photoImage: media?.image,
                 watermarkMode: watermarkOption.watermarkMode
             )
         )
+    }
+
+    private var isOutputReady: Bool {
+        if media?.kind == .video {
+            guard let renderedVideoURL else {
+                return false
+            }
+            return FileManager.default.fileExists(atPath: renderedVideoURL.path)
+        }
+        return renderedImage != nil
+    }
+
+    private var outputAspectRatio: CGFloat {
+        if let ticketAspectRatio = TicketCardLayout.aspectRatio(for: template.renderStyle) {
+            return ticketAspectRatio
+        }
+
+        let size = media?.contentSize ?? renderedImage?.size ?? template.defaultAspectRatio.outputSize
+        guard size.width > 0, size.height > 0 else {
+            return template.defaultAspectRatio.value
+        }
+
+        return size.width / size.height
     }
 
     private var watermarkAccessPolicy: WatermarkAccessPolicy {
@@ -539,6 +687,10 @@ struct PreviewSaveView: View {
     }
 
     private func selectWatermarkOption(_ option: WatermarkExportOption) {
+        guard watermarkOption != option else {
+            return
+        }
+
         guard option == .withWatermark || watermarkAccessSnapshot.canExportWithoutWatermark else {
             outputAlert = PreviewOutputAlert(title: appState.t("preview.freeUsedTitle"), message: appState.t("preview.freeUsedMessage"))
             watermarkOption = .withWatermark
@@ -607,8 +759,6 @@ struct PreviewSaveView: View {
         let didConsume = watermarkAccessPolicy.consumeIfNeeded(for: .withoutWatermark)
         if didConsume {
             watermarkOption = .withWatermark
-            renderedImage = nil
-            renderIfNeeded()
         }
 
         return didConsume
@@ -657,7 +807,7 @@ struct PreviewSaveView: View {
             let record = try DraftRepository.shared.save(
                 template: template,
                 editState: editState,
-                photoImage: photoImage,
+                media: media,
                 existingDraftID: existingDraftID,
                 draftLimit: appState.draftLimit
             )
@@ -684,12 +834,57 @@ private struct PreviewOutputAlert: Identifiable {
     let message: String?
 }
 
+private struct PreviewLoopingVideoPlayerView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> PreviewLoopingVideoPlayerUIView {
+        let view = PreviewLoopingVideoPlayerUIView()
+        view.configure(url: url)
+        return view
+    }
+
+    func updateUIView(_ uiView: PreviewLoopingVideoPlayerUIView, context: Context) {
+        uiView.configure(url: url)
+    }
+}
+
+private final class PreviewLoopingVideoPlayerUIView: UIView {
+    private var currentURL: URL?
+    private var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
+
+    override static var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    private var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    func configure(url: URL) {
+        guard currentURL != url else {
+            return
+        }
+
+        currentURL = url
+        let item = AVPlayerItem(url: url)
+        let queuePlayer = AVQueuePlayer(playerItem: item)
+        queuePlayer.isMuted = false
+        queuePlayer.actionAtItemEnd = .none
+        player = queuePlayer
+        looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
+        playerLayer.player = queuePlayer
+        playerLayer.videoGravity = .resizeAspect
+        queuePlayer.play()
+    }
+}
+
 #Preview {
     NavigationStack {
         PreviewSaveView(
             template: .previewPetLifelog,
             editState: Template.previewPetLifelog.previewEditState,
-            photoImage: nil,
+            media: nil,
             draftID: nil
         )
         .environmentObject(MemoriesAppState())

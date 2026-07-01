@@ -100,7 +100,7 @@ private struct TemplateCardView: View {
             TemplateCanvasPreview(
                 template: template,
                 editState: template.previewEditState,
-                photoImage: nil,
+                media: nil,
                 aspectRatio: template.defaultAspectRatio.value
             )
             .frame(width: 82)

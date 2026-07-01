@@ -120,6 +120,46 @@ struct MemoriesSecondaryButton: View {
     }
 }
 
+struct MemoriesDestructiveButton: View {
+    let title: String
+    let systemImage: String?
+    let action: () -> Void
+
+    init(_ title: String, systemImage: String? = "trash", action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .layoutPriority(1)
+            } icon: {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.subheadline.weight(.semibold))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .foregroundStyle(Color.red.opacity(0.92))
+            .background(Color.red.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .stroke(Color.red.opacity(0.42), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct MemoriesWatermarkOptionButton: View {
     let title: String
     let subtitle: String

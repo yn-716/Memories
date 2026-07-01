@@ -20,6 +20,7 @@ struct SettingsView: View {
                 planSection
                 languageSection
                 privacySection
+                storageSection
                 supportPoliciesSection
                 versionSection
 
@@ -149,12 +150,33 @@ struct SettingsView: View {
         }
     }
 
+    private var storageSection: some View {
+        Section(appState.t("settings.storage")) {
+            Button {
+                deleteTemporaryFiles()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "trash")
+                        .foregroundStyle(MemoriesTheme.accentDeep)
+                    Text(appState.t("settings.deleteTemporaryFiles"))
+                        .foregroundStyle(MemoriesTheme.textMain)
+                    Spacer()
+                }
+            }
+            .buttonStyle(.plain)
+
+            Text(appState.t("settings.deleteTemporaryFilesDescription"))
+                .font(.caption)
+                .foregroundStyle(MemoriesTheme.textSub)
+        }
+    }
+
     private var versionSection: some View {
         Section {
             HStack {
                 Text(appState.t("settings.version"))
                 Spacer()
-                Text("1.0")
+                Text(Bundle.main.memoriesDisplayVersion)
                     .foregroundStyle(MemoriesTheme.textSub)
             }
         }
@@ -268,6 +290,15 @@ struct SettingsView: View {
             settingsAlert = SettingsAlert(title: appState.t("purchase.restoreFailed"), message: error.localizedDescription)
         }
     }
+
+    private func deleteTemporaryFiles() {
+        do {
+            _ = try MediaFileManager.shared.cleanupTemporaryFiles(olderThan: Date())
+            settingsAlert = SettingsAlert(title: appState.t("settings.temporaryFilesDeleted"), message: nil)
+        } catch {
+            settingsAlert = SettingsAlert(title: appState.t("settings.temporaryFilesDeleteFailed"), message: error.localizedDescription)
+        }
+    }
 }
 
 private struct SettingsAlert: Identifiable {
@@ -311,5 +342,6 @@ private enum SettingsSupportDestination: String, CaseIterable, Identifiable {
         SettingsView()
             .environmentObject(MemoriesAppState())
             .environmentObject(StoreKitManager())
+            .environmentObject(AnnouncementStore())
     }
 }

@@ -17,4 +17,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(MemoriesAppState())
         .environmentObject(StoreKitManager())
+        .environmentObject(AnnouncementStore())
 }

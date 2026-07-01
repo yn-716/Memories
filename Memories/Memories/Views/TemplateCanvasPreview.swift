@@ -1,10 +1,12 @@
+import AVFoundation
+import CoreImage
 import SwiftUI
 import UIKit
 
 struct TemplateCanvasPreview: View {
     let template: Template
     let editState: CardEditState
-    let photoImage: UIImage?
+    let media: EditableMedia?
     let aspectRatio: CGFloat
     let isPhotoAdjustmentActive: Bool
     let watermarkMode: WatermarkMode
@@ -16,7 +18,7 @@ struct TemplateCanvasPreview: View {
     init(
         template: Template,
         editState: CardEditState,
-        photoImage: UIImage?,
+        media: EditableMedia?,
         aspectRatio: CGFloat,
         isPhotoAdjustmentActive: Bool = false,
         watermarkMode: WatermarkMode = .hidden,
@@ -24,7 +26,7 @@ struct TemplateCanvasPreview: View {
     ) {
         self.template = template
         self.editState = editState
-        self.photoImage = photoImage
+        self.media = media
         self.aspectRatio = aspectRatio
         self.isPhotoAdjustmentActive = isPhotoAdjustmentActive
         self.watermarkMode = watermarkMode
@@ -54,7 +56,7 @@ struct TemplateCanvasPreview: View {
         let frameRect = CGRect(origin: .zero, size: size)
 
         ZStack(alignment: .topLeading) {
-            photoLayer(frameRect: frameRect, canvasSize: size)
+            mediaLayer(frameRect: frameRect, canvasSize: size)
 
             overlayContent(size: size)
                 .padding(CardOverlayLayout.inset(for: size))
@@ -73,7 +75,13 @@ struct TemplateCanvasPreview: View {
     @ViewBuilder
     private func retroFilmPreview(size: CGSize) -> some View {
         ZStack(alignment: .topLeading) {
-            if let photoImage,
+            if media?.kind == .video {
+                mediaLayer(
+                    frameRect: CGRect(origin: .zero, size: size),
+                    canvasSize: size,
+                    videoFilterType: editState.retroFilterType
+                )
+            } else if let photoImage = media?.image,
                let filteredImage = RetroFilmEffect.render(image: photoImage, size: size, filterType: editState.retroFilterType) {
                 Image(uiImage: filteredImage)
                     .resizable()
@@ -113,7 +121,7 @@ struct TemplateCanvasPreview: View {
                 Color(uiColor: TicketTypography.background)
                     .frame(width: size.width, height: size.height)
 
-                photoLayer(frameRect: layout.photoFrame, canvasSize: size)
+                mediaLayer(frameRect: layout.photoFrame, canvasSize: size)
 
                 Image(layout.frameAssetName)
                     .resizable()
@@ -213,19 +221,29 @@ struct TemplateCanvasPreview: View {
     }
 
     @ViewBuilder
-    private func photoLayer(frameRect: CGRect, canvasSize: CGSize) -> some View {
+    private func mediaLayer(
+        frameRect: CGRect,
+        canvasSize: CGSize,
+        videoFilterType: RetroFilterType? = nil
+    ) -> some View {
         ZStack(alignment: .topLeading) {
-            if let photoImage {
+            if let media {
                 let drawRect = PhotoPlacementLayout.drawRect(
-                    imageSize: photoImage.size,
+                    imageSize: media.contentSize,
                     frameRect: CGRect(origin: .zero, size: frameRect.size),
                     placement: editState.photoPlacement
                 )
 
-                Image(uiImage: photoImage)
-                    .resizable()
-                    .frame(width: drawRect.width, height: drawRect.height)
-                    .position(x: drawRect.midX, y: drawRect.midY)
+                if media.kind == .video, let videoURL = media.videoURL {
+                    LoopingVideoPlayerView(url: videoURL, filterType: videoFilterType)
+                        .frame(width: drawRect.width, height: drawRect.height)
+                        .position(x: drawRect.midX, y: drawRect.midY)
+                } else {
+                    Image(uiImage: media.previewImage)
+                        .resizable()
+                        .frame(width: drawRect.width, height: drawRect.height)
+                        .position(x: drawRect.midX, y: drawRect.midY)
+                }
             } else {
                 LinearGradient(
                     colors: [
@@ -250,7 +268,7 @@ struct TemplateCanvasPreview: View {
     private func photoAdjustmentGesture(frameRect: CGRect) -> some Gesture {
         let drag = DragGesture(minimumDistance: 1)
             .onChanged { value in
-                guard isPhotoAdjustmentActive, let photoImage else {
+                guard isPhotoAdjustmentActive, let media else {
                     return
                 }
 
@@ -259,7 +277,7 @@ struct TemplateCanvasPreview: View {
                 let nextPlacement = PhotoPlacementLayout.placement(
                     from: start,
                     applyingDrag: value.translation,
-                    imageSize: photoImage.size,
+                    imageSize: media.contentSize,
                     frameRect: frameRect
                 )
                 onPhotoPlacementChanged?(nextPlacement)
@@ -509,6 +527,62 @@ private extension String {
 
 private typealias PreviewTextRole = CardOverlayTextRole
 
+private struct LoopingVideoPlayerView: UIViewRepresentable {
+    let url: URL
+    let filterType: RetroFilterType?
+
+    func makeUIView(context: Context) -> LoopingVideoPlayerUIView {
+        let view = LoopingVideoPlayerUIView()
+        view.configure(url: url, filterType: filterType)
+        return view
+    }
+
+    func updateUIView(_ uiView: LoopingVideoPlayerUIView, context: Context) {
+        uiView.configure(url: url, filterType: filterType)
+    }
+}
+
+private final class LoopingVideoPlayerUIView: UIView {
+    private var currentURL: URL?
+    private var currentFilterType: RetroFilterType?
+    private var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
+
+    override static var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    private var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    func configure(url: URL, filterType: RetroFilterType?) {
+        guard currentURL != url || currentFilterType != filterType else {
+            return
+        }
+
+        currentURL = url
+        currentFilterType = filterType
+        let asset = AVURLAsset(url: url)
+        let item = AVPlayerItem(asset: asset)
+        if let filterType {
+            item.videoComposition = AVMutableVideoComposition(asset: asset) { request in
+                let filteredImage = RetroFilmEffect.apply(to: request.sourceImage, filterType: filterType)
+                request.finish(with: filteredImage, context: nil)
+            }
+        }
+        let queuePlayer = AVQueuePlayer(playerItem: item)
+        queuePlayer.isMuted = true
+        queuePlayer.actionAtItemEnd = .none
+
+        player = queuePlayer
+        looper = AVPlayerLooper(player: queuePlayer, templateItem: item)
+        playerLayer.player = queuePlayer
+        playerLayer.videoGravity = .resizeAspectFill
+        queuePlayer.play()
+    }
+}
+
 #Preview {
     let template = Template(
         id: "preview",
@@ -530,7 +604,7 @@ private typealias PreviewTextRole = CardOverlayTextRole
     return TemplateCanvasPreview(
         template: template,
         editState: template.previewEditState,
-        photoImage: nil,
+        media: nil,
         aspectRatio: CardAspectRatio.fourByFive.value
     )
     .frame(width: 240)

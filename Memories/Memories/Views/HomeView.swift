@@ -6,10 +6,11 @@ struct HomeView: View {
     private let templates = TemplateRepository.bundled.loadTemplates().templates
 
     @EnvironmentObject private var appState: MemoriesAppState
-    @State private var selectedPhotoItem: PhotosPickerItem?
+    @EnvironmentObject private var announcementStore: AnnouncementStore
+    @State private var selectedMediaItem: PhotosPickerItem?
     @State private var editorRoute: EditorRoute?
-    @State private var isLoadingPhoto = false
-    @State private var photoErrorMessage: String?
+    @State private var isLoadingMedia = false
+    @State private var mediaErrorMessage: String?
     @State private var showPurchase = false
     @State private var showPhotoPicker = false
     @State private var showStyleSelection = false
@@ -18,9 +19,10 @@ struct HomeView: View {
     @State private var showDrafts = false
     @State private var showPetCalendar = false
     @State private var showPetCalendarToday = false
+    @State private var showAnnouncements = false
 
     var body: some View {
-        let photoButtonTitle = isLoadingPhoto ? appState.t("common.loading") : appState.t("home.imageEditor")
+        let mediaButtonTitle = isLoadingMedia ? appState.t("common.loading") : appState.t("home.imageEditor")
 
         NavigationStack {
             ZStack {
@@ -37,18 +39,18 @@ struct HomeView: View {
                                 startPhotoSelection()
                             } label: {
                                 MemoriesPrimaryButtonLabel(
-                                    title: photoButtonTitle,
+                                    title: mediaButtonTitle,
                                     systemImage: "photo"
                                 )
                             }
                             .buttonStyle(.plain)
                             .photosPicker(
                                 isPresented: $showPhotoPicker,
-                                selection: $selectedPhotoItem,
-                                matching: .images,
+                                selection: $selectedMediaItem,
+                                matching: .any(of: [.images, .videos]),
                                 photoLibrary: .shared()
                             )
-                            .disabled(isLoadingPhoto)
+                            .disabled(isLoadingMedia)
 
                             Button {
                                 showPetCalendar = true
@@ -88,8 +90,8 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    if let photoErrorMessage {
-                        Text(photoErrorMessage)
+                    if let mediaErrorMessage {
+                        Text(mediaErrorMessage)
                             .font(.footnote.weight(.medium))
                             .foregroundStyle(MemoriesTheme.textSub)
                             .padding(12)
@@ -106,6 +108,13 @@ struct HomeView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    AnnouncementBellButton(unreadCount: announcementStore.unreadCount()) {
+                        showAnnouncements = true
+                    }
+                }
+            }
             .navigationDestination(isPresented: $showDrafts) {
                 DraftsView()
             }
@@ -115,15 +124,18 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showPetCalendarToday) {
                 PetCalendarHomeView(openTodayEditorOnAppear: true)
             }
+            .navigationDestination(isPresented: $showAnnouncements) {
+                AnnouncementsView()
+            }
             .navigationDestination(item: $editorRoute) { route in
                 EditorView(
                     template: route.template,
-                    photoImage: route.photoImage,
+                    media: route.media,
                     initialEditState: route.initialEditState
                 )
             }
-            .task(id: selectedPhotoItem) {
-                await loadSelectedPhoto()
+            .task(id: selectedMediaItem) {
+                await loadSelectedMedia()
             }
             .sheet(isPresented: $showPurchase) {
                 PurchaseView()
@@ -153,6 +165,11 @@ struct HomeView: View {
             .onOpenURL { url in
                 handleDeepLink(url)
             }
+            .task {
+                _ = try? MediaFileManager.shared.cleanupTemporaryFiles()
+                DraftRepository.shared.cleanupOrphanedFiles()
+                await announcementStore.refreshIfNeeded()
+            }
         }
     }
 
@@ -172,6 +189,8 @@ struct HomeView: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 8)
             }
 
             Text(appState.t("home.tagline"))
@@ -191,49 +210,41 @@ struct HomeView: View {
     }
 
     @MainActor
-    private func loadSelectedPhoto() async {
-        guard let selectedPhotoItem else {
+    private func loadSelectedMedia() async {
+        guard let selectedMediaItem else {
             return
         }
 
-        isLoadingPhoto = true
-        photoErrorMessage = nil
+        isLoadingMedia = true
+        mediaErrorMessage = nil
         defer {
-            isLoadingPhoto = false
-            self.selectedPhotoItem = nil
+            isLoadingMedia = false
+            self.selectedMediaItem = nil
         }
 
         do {
-            guard
-                let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
-                let image = UIImage(data: data)
-            else {
-                photoErrorMessage = appState.t("home.photoLoadFailed")
-                return
-            }
-
-            let metadata = await PhotoMetadataReader().metadata(
-                from: data,
+            let media = try await EditableMediaLoader().load(
+                from: selectedMediaItem,
                 allowsLocationSuggestion: appState.suggestPlaceFromPhotoLocation
             )
-            let template = template(for: selectedCreationStyle, photoImage: image)
-            let initialEditState = initialEditState(from: metadata, template: template)
+            let template = template(for: selectedCreationStyle, media: media)
+            let initialEditState = initialEditState(from: media, template: template)
             editorRoute = EditorRoute(
                 template: template,
-                photoImage: image,
+                media: media,
                 initialEditState: initialEditState
             )
         } catch {
-            photoErrorMessage = appState.t("home.photoLoadError")
+            mediaErrorMessage = appState.t("home.mediaLoadError")
         }
     }
 
-    private func initialEditState(from metadata: PhotoMetadata, template: Template) -> CardEditState {
+    private func initialEditState(from media: EditableMedia, template: Template) -> CardEditState {
         var state = CardEditState.newCard(
             defaultLayout: template.defaultLayout,
             fontRole: template.overlayStyle.defaultFontRole,
             textColor: template.overlayStyle.defaultTextColor,
-            date: metadata.capturedAt ?? Date()
+            date: media.capturedAt ?? Date()
         )
 
         if template.renderStyle.isRetroFilm {
@@ -250,7 +261,7 @@ struct HomeView: View {
             return state
         }
 
-        if let locationText = metadata.locationText?.trimmingCharacters(in: .whitespacesAndNewlines), !locationText.isEmpty {
+        if let locationText = media.locationText?.trimmingCharacters(in: .whitespacesAndNewlines), !locationText.isEmpty {
             state.locationText = String(locationText.prefix(30))
             state.visibilitySettings.showLocation = true
         }
@@ -258,10 +269,10 @@ struct HomeView: View {
         return state
     }
 
-    private func template(for style: CardCreationStyle, photoImage: UIImage) -> Template {
+    private func template(for style: CardCreationStyle, media: EditableMedia) -> Template {
         switch style {
         case .ticketFrame:
-            let aspectRatio = photoImage.size.width / max(photoImage.size.height, 1)
+            let aspectRatio = media.contentSize.width / max(media.contentSize.height, 1)
             let renderStyle: TemplateRenderStyle = aspectRatio >= 1.15 ? .ticketLandscape : .ticketPortrait
             return templates.first(where: { $0.renderStyle == renderStyle })
                 ?? templates.first(where: { $0.renderStyle.isTicket })
@@ -447,7 +458,7 @@ private struct PurchaseEntryButton: View {
 private struct EditorRoute: Identifiable, Hashable {
     let id = UUID()
     let template: Template
-    let photoImage: UIImage
+    let media: EditableMedia
     let initialEditState: CardEditState
 
     static func == (lhs: EditorRoute, rhs: EditorRoute) -> Bool {
@@ -496,4 +507,5 @@ struct HomeActionRow: View {
     HomeView()
         .environmentObject(MemoriesAppState())
         .environmentObject(StoreKitManager())
+        .environmentObject(AnnouncementStore())
 }

@@ -99,14 +99,14 @@ final class PetCalendarDateTests: XCTestCase {
         XCTAssertEqual(style.accentColor, .navy)
     }
 
-    func testFirstWeatherIconSelectionAppliesReadableDefaultAccentColor() {
+    func testFirstWeatherIconSelectionKeepsWhiteDefaultAccentColor() {
         var style = PetCalendarOverlayStyle.default
 
         style.selectWeatherIcon(.cloudy)
 
         XCTAssertTrue(style.isWeatherIconVisible)
         XCTAssertEqual(style.weatherIcon, .cloudy)
-        XCTAssertEqual(style.accentColor, .blue)
+        XCTAssertEqual(style.accentColor, .white)
     }
 
     func testWeekModelStartsOnSundayAndIncludesToday() {

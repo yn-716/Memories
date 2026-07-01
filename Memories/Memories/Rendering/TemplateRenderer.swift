@@ -67,6 +67,98 @@ final class TemplateRenderer {
         }
     }
 
+    func renderVideoOverlay(configuration: TemplateRenderConfiguration) -> UIImage? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+
+        let renderer = UIGraphicsImageRenderer(size: configuration.outputSize, format: format)
+        return renderer.image { rendererContext in
+            let context = rendererContext.cgContext
+            context.clear(CGRect(origin: .zero, size: configuration.outputSize))
+
+            if configuration.template.renderStyle.isRetroFilm {
+                drawRetroVideoOverlay(configuration: configuration, in: context)
+            } else if configuration.template.renderStyle.isTicket {
+                drawTicketVideoOverlay(configuration: configuration, in: context)
+            } else {
+                drawSimpleVideoOverlay(configuration: configuration, in: context)
+            }
+        }
+    }
+
+    func mediaFrame(for template: Template, outputSize: CGSize) -> CGRect {
+        if let layout = TicketCardLayout.layout(for: template.renderStyle, canvasSize: outputSize) {
+            return layout.photoFrame
+        }
+
+        return CGRect(origin: .zero, size: outputSize)
+    }
+
+    private func drawSimpleVideoOverlay(configuration: TemplateRenderConfiguration, in context: CGContext) {
+        drawOverlay(
+            template: configuration.template,
+            editState: configuration.editState,
+            in: context,
+            size: configuration.outputSize
+        )
+        WatermarkRenderer().draw(
+            mode: configuration.watermarkMode,
+            overlayPosition: configuration.editState.selectedPosition,
+            in: context,
+            size: configuration.outputSize
+        )
+    }
+
+    private func drawRetroVideoOverlay(configuration: TemplateRenderConfiguration, in context: CGContext) {
+        UIGraphicsPushContext(context)
+        drawRetroDateStamp(
+            configuration.editState.retroDateStampText,
+            filterType: configuration.editState.retroFilterType,
+            canvasSize: configuration.outputSize
+        )
+        UIGraphicsPopContext()
+
+        WatermarkRenderer().draw(
+            mode: configuration.watermarkMode,
+            overlayPosition: .bottomRight,
+            in: context,
+            size: configuration.outputSize
+        )
+    }
+
+    private func drawTicketVideoOverlay(configuration: TemplateRenderConfiguration, in context: CGContext) {
+        let size = configuration.outputSize
+        let canvasRect = CGRect(origin: .zero, size: size)
+
+        context.setFillColor(TicketTypography.background.cgColor)
+        context.fill(canvasRect)
+
+        guard let layout = TicketCardLayout.layout(for: configuration.template.renderStyle, canvasSize: size) else {
+            return
+        }
+
+        context.clear(layout.photoFrame)
+
+        UIGraphicsPushContext(context)
+        UIImage(named: layout.frameAssetName)?.draw(in: canvasRect)
+        drawTicketText(
+            layout: layout,
+            editState: configuration.editState,
+            renderStyle: configuration.template.renderStyle,
+            canvasSize: size
+        )
+        UIGraphicsPopContext()
+
+        WatermarkRenderer().draw(
+            mode: configuration.watermarkMode,
+            overlayPosition: .bottomLeft,
+            in: context,
+            size: size,
+            bounds: layout.photoFrame
+        )
+    }
+
     private func drawRetroFilm(configuration: TemplateRenderConfiguration, in context: CGContext) {
         let size = configuration.outputSize
         let canvasRect = CGRect(origin: .zero, size: size)
@@ -1008,6 +1100,20 @@ enum RetroDateStampRenderer {
 enum RetroFilmEffect {
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
+    static func apply(to image: CIImage, filterType: RetroFilterType) -> CIImage {
+        let extent = image.extent
+        let output: CIImage
+        switch filterType {
+        case .sepia:
+            output = sepiaImage(image)
+        case .nostalgic:
+            output = nostalgicImage(image)
+        case .monochrome:
+            output = monochromeImage(image)
+        }
+        return output.cropped(to: extent)
+    }
+
     static func render(image: UIImage, size: CGSize, filterType: RetroFilterType) -> UIImage? {
         guard size.width > 0, size.height > 0 else {
             return nil
@@ -1019,15 +1125,7 @@ enum RetroFilmEffect {
         }
 
         let extent = input.extent
-        let output: CIImage
-        switch filterType {
-        case .sepia:
-            output = sepiaImage(input).cropped(to: extent)
-        case .nostalgic:
-            output = nostalgicImage(input).cropped(to: extent)
-        case .monochrome:
-            output = monochromeImage(input).cropped(to: extent)
-        }
+        let output = apply(to: input, filterType: filterType)
 
         guard let cgImage = ciContext.createCGImage(output, from: extent) else {
             return normalized

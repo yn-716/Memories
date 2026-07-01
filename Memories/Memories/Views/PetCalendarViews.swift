@@ -788,6 +788,7 @@ struct PetCalendarDayEditorView: View {
     @State private var pendingPhoto: PendingPetCalendarPhoto?
     @State private var showDateMismatch = false
     @State private var showReplaceConfirmation = false
+    @State private var showDeleteConfirmation = false
     @State private var alert: PetCalendarAlert?
     @State private var isProcessing = false
 
@@ -851,6 +852,15 @@ struct PetCalendarDayEditorView: View {
             Button(appState.t("common.cancel"), role: .cancel) {}
         } message: {
             Text(appState.t("calendar.replaceMessage"))
+        }
+        .alert(appState.t("calendar.deleteConfirmTitle"), isPresented: $showDeleteConfirmation) {
+            Button(appState.t("calendar.deleteEntry"), role: .destructive) {
+                deleteEntry()
+            }
+
+            Button(appState.t("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(appState.t("calendar.deleteConfirmMessage"))
         }
         .alert(item: $alert) { alert in
             Alert(title: Text(alert.title), message: alert.message.map(Text.init), dismissButton: .default(Text(appState.t("common.ok"))))
@@ -931,9 +941,10 @@ struct PetCalendarDayEditorView: View {
                 weatherIconPanel
 
                 if existingEntry != nil {
-                    MemoriesSecondaryButton(appState.t("calendar.deleteEntry"), systemImage: "trash") {
-                        deleteEntry()
+                    MemoriesDestructiveButton(appState.t("calendar.deleteEntry"), systemImage: "trash") {
+                        showDeleteConfirmation = true
                     }
+                    .disabled(isProcessing)
                 }
             }
             .padding(16)
@@ -1075,9 +1086,6 @@ struct PetCalendarDayEditorView: View {
         if overlayStyle.weatherIcon == nil {
             overlayStyle.weatherIcon = .sunny
         }
-        if overlayStyle.accentColor == .white {
-            overlayStyle.accentColor = .blue
-        }
     }
 
     private func loadExisting() {
@@ -1110,7 +1118,7 @@ struct PetCalendarDayEditorView: View {
                 let data = try await selectedPhotoItem.loadTransferable(type: Data.self),
                 let image = UIImage(data: data)
             else {
-                alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: appState.t("home.photoLoadFailed"))
+                alert = PetCalendarAlert(title: appState.t("calendar.saveFailed"), message: appState.t("calendar.photoLoadFailed"))
                 return
             }
 
@@ -1189,6 +1197,10 @@ struct PetCalendarDayEditorView: View {
     }
 
     private func deleteEntry() {
+        guard !isProcessing else {
+            return
+        }
+
         Task {
             await deleteEntryAfterRefreshingEntitlements()
         }
@@ -1199,6 +1211,9 @@ struct PetCalendarDayEditorView: View {
         guard let repository else {
             return
         }
+        isProcessing = true
+        defer { isProcessing = false }
+
         do {
             await storeKitManager.ensureFreshEntitlements()
             try repository.deleteEntry(
@@ -1226,7 +1241,7 @@ struct PetCalendarPreviewView: View {
     @State private var hasAppliedInitialOption = false
     @State private var hasUserSelectedOption = false
     @State private var alert: PetCalendarAlert?
-    @State private var shareItem: ShareImageItem?
+    @State private var shareItem: ShareMediaItem?
     @State private var isProcessing = false
     @State private var showWatermarklessShareConfirmation = false
 
@@ -1274,7 +1289,7 @@ struct PetCalendarPreviewView: View {
             Text(appState.t("preview.confirmShareMessage"))
         }
         .sheet(item: $shareItem) { item in
-            ShareSheet(items: [item.image]) { completed, error in
+            ShareSheet(items: [item.item]) { completed, error in
                 handleShareCompletion(for: item, completed: completed, error: error)
             }
         }
@@ -1398,6 +1413,7 @@ struct PetCalendarPreviewView: View {
                 alert = PetCalendarAlert(title: appState.t("preview.freeUpdateFailed"), message: appState.t("preview.todayUsed"))
                 return
             }
+            ReviewRequestManager.shared.recordSuccessfulSaveAndRequestReviewIfEligible()
             alert = PetCalendarAlert(title: appState.t("calendar.outputSaved"), message: nil)
         } catch {
             alert = PetCalendarAlert(title: appState.t("calendar.outputSaveFailed"), message: error.localizedDescription)
@@ -1428,10 +1444,10 @@ struct PetCalendarPreviewView: View {
             alert = PetCalendarAlert(title: appState.t("calendar.outputShareFailed"), message: appState.t("preview.imageGenerateFailed"))
             return
         }
-        shareItem = ShareImageItem(image: image, consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance)
+        shareItem = ShareMediaItem(item: image, consumesFreeWatermarkAllowance: consumesFreeWatermarkAllowance, cleanupURL: nil)
     }
 
-    private func handleShareCompletion(for item: ShareImageItem, completed: Bool, error: Error?) {
+    private func handleShareCompletion(for item: ShareMediaItem, completed: Bool, error: Error?) {
         if let error {
             alert = PetCalendarAlert(title: appState.t("calendar.outputShareFailed"), message: error.localizedDescription)
             return

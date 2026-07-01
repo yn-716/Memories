@@ -399,12 +399,8 @@ struct PetCalendarOverlayStyle: Codable, Hashable {
     }
 
     mutating func selectWeatherIcon(_ icon: PetCalendarWeatherIcon) {
-        let shouldApplyReadableDefaultAccent = !isWeatherIconVisible && weatherIcon == nil && accentColor == .white
         isWeatherIconVisible = true
         weatherIcon = icon
-        if shouldApplyReadableDefaultAccent {
-            accentColor = .blue
-        }
     }
 }
 

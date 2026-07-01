@@ -3,7 +3,7 @@ import UIKit
 
 struct EditorView: View {
     let template: Template
-    let photoImage: UIImage?
+    let media: EditableMedia?
 
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appState: MemoriesAppState
@@ -26,13 +26,13 @@ struct EditorView: View {
 
     init(
         template: Template,
-        photoImage: UIImage? = nil,
+        media: EditableMedia? = nil,
         initialEditState: CardEditState? = nil,
         draftID: UUID? = nil
     ) {
         let rawInitialState = if let initialEditState {
             initialEditState
-        } else if photoImage == nil {
+        } else if media == nil {
             template.previewEditState
         } else {
             CardEditState.newCard(
@@ -44,7 +44,7 @@ struct EditorView: View {
         let initialState = limitedEditState(rawInitialState)
 
         self.template = template
-        self.photoImage = photoImage
+        self.media = media
         _editState = State(initialValue: initialState)
         _lastPersistedEditState = State(initialValue: initialState)
         _currentDraftID = State(initialValue: draftID)
@@ -133,7 +133,7 @@ struct EditorView: View {
                         previewRoute = PreviewRoute(
                             template: template,
                             editState: editState,
-                            photoImage: photoImage,
+                            media: media,
                             draftID: currentDraftID
                         )
                     } label: {
@@ -210,7 +210,7 @@ struct EditorView: View {
             PreviewSaveView(
                 template: route.template,
                 editState: route.editState,
-                photoImage: route.photoImage,
+                media: route.media,
                 draftID: route.draftID
             ) { draftID in
                 currentDraftID = draftID
@@ -286,9 +286,9 @@ struct EditorView: View {
                 TemplateCanvasPreview(
                     template: template,
                     editState: editState,
-                    photoImage: photoImage,
+                    media: media,
                     aspectRatio: photoAspectRatio,
-                    isPhotoAdjustmentActive: !template.renderStyle.isRetroFilm,
+                    isPhotoAdjustmentActive: media != nil && !template.renderStyle.isRetroFilm,
                     watermarkMode: editorPreviewWatermarkMode,
                     onPhotoPlacementChanged: { placement in
                         editState.photoPlacement = placement
@@ -831,11 +831,11 @@ struct EditorView: View {
             return ticketAspectRatio
         }
 
-        guard let photoImage, photoImage.size.width > 0, photoImage.size.height > 0 else {
+        guard let media, media.contentSize.width > 0, media.contentSize.height > 0 else {
             return template.defaultAspectRatio.value
         }
 
-        return photoImage.size.width / photoImage.size.height
+        return media.contentSize.width / media.contentSize.height
     }
 
     private var availableTabs: [EditorPanelTab] {
@@ -844,10 +844,10 @@ struct EditorView: View {
         }
 
         if template.isTicketStyle {
-            return [.text]
+            return [.text, .photo]
         }
 
-        return [.text, .icon, .appearance, .position]
+        return [.text, .icon, .appearance, .position, .photo]
     }
 
     private var availableTextTargets: [TextEditTarget] {
@@ -962,7 +962,7 @@ struct EditorView: View {
             let record = try DraftRepository.shared.save(
                 template: template,
                 editState: editState,
-                photoImage: photoImage,
+                media: media,
                 existingDraftID: currentDraftID,
                 draftLimit: appState.draftLimit
             )
@@ -1040,7 +1040,7 @@ private struct PreviewRoute: Identifiable, Hashable {
     let id = UUID()
     let template: Template
     let editState: CardEditState
-    let photoImage: UIImage?
+    let media: EditableMedia?
     let draftID: UUID?
 
     static func == (lhs: PreviewRoute, rhs: PreviewRoute) -> Bool {

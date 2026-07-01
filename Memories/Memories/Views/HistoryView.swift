@@ -129,10 +129,10 @@ struct DraftsView: View {
     private func draftDestination(for draft: DraftRecord) -> some View {
         let template = templates.first(where: { $0.id == draft.templateID }) ?? .previewPetLifelog
 
-        if let image = repository.image(for: draft) {
+        if let media = repository.editableMedia(for: draft) {
             EditorView(
                 template: template,
-                photoImage: image,
+                media: media,
                 initialEditState: draft.editState,
                 draftID: draft.id
             )
@@ -221,15 +221,27 @@ private struct DraftRow: View {
     @ViewBuilder
     private var thumbnailView: some View {
         if let thumbnail {
-            Image(uiImage: thumbnail)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(MemoriesTheme.border.opacity(0.7), lineWidth: 1)
+            ZStack(alignment: .bottomTrailing) {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(MemoriesTheme.border.opacity(0.7), lineWidth: 1)
+                    }
+
+                if draft.mediaType == .video {
+                    Image(systemName: "video.fill")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(5)
+                        .background(.black.opacity(0.45))
+                        .clipShape(Circle())
+                        .padding(5)
                 }
+            }
         } else {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(MemoriesTheme.subBackground.opacity(0.86))

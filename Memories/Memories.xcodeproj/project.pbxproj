@@ -343,7 +343,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = MemoriesWidgetExtension/MemoriesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MemoriesWidgetExtension/Info.plist;
@@ -371,7 +371,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = MemoriesWidgetExtension/MemoriesWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 8PV98WQSVZ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MemoriesWidgetExtension/Info.plist;
